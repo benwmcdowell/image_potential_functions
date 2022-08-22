@@ -43,15 +43,27 @@ def build_potential_no_dielectric(n,zmin,w,Vg,V0,d,phi,V,zm):
     x*=1e9
     return x,pot
 
-class Numerov_Cooley_integration():
+class Numerov_Cooley():
     def __init__(self,x,pot,tol=0.0001):
-        self.npts=np.len(x)
+        self.npts=len(x)
         self.x=x
         self.pot=pot
         self.dx=(np.max(self.x)-np.min(self.x))/len(self.x)
         self.wf=[]
         self.E=[]
         self.tol=tol
+        self.nodes=[]
+        
+    def main(self,E):
+        self.optimize_energy(E)
+        
+    def node_counter(self,R):
+        counter=0
+        for i in range(self.npts-1):
+            if R[i]*R[i+1]<0:
+                counter+=1
+        
+        return counter
         
     def optimize_energy(self,E):
         dE=self.tol+1
@@ -61,6 +73,8 @@ class Numerov_Cooley_integration():
             counter+=1
         self.E.append(E)
         self.wf.append(R)
+        nodes=self.node_counter(R)
+        self.nodes.append(nodes)
         
     def integrator(self,E):
         Yin=np.zeros(self.npts)
