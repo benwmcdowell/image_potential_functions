@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 #V is the voltage bias in eV
 #Vmin is the minimum potential of the substrate periodic potential in eV
 #zm is the range of the potential set to a constant value near the sumple interface (nm)
-def build_potential_no_dielectric(n,zmin,w,Vg,V0,d,phi,V,zm):
+def build_potential_no_dielectric(n,zmin,w,Vg,V0,d,phi_t,phi_s,V,zm):
     d*=1e-9 #convert nm to m
     zm*=1e-9 #convert nm to m
     zmin*=1e-9 #convert nm to m
@@ -62,10 +62,15 @@ def particle_in_a_box(n,L):
     return x,y
 
 class Numerov_Cooley():
+    #x is in nm, pot is in J
     def __init__(self,x,pot,tol=0.0000001):
+        h=6.626e-34/np.pi/2 #J*s
+        m=9.11e-31 #kg
+        self.k=2*m/h**2*1e-18 #1/nm**2/J
+        
         self.npts=len(x)
-        self.x=x*18.8973
-        self.pot=pot*2.294e17
+        self.x=x
+        self.pot=pot*self.k
         self.pot-=np.min(self.pot)
         self.dx=(np.max(self.x)-np.min(self.x))/len(self.x)
         self.wf=[]
@@ -74,7 +79,9 @@ class Numerov_Cooley():
         self.nodes=[]
         self.nstates=0
         
+    #E is the trial energy in eV
     def main(self,E):
+        E*=self.k/6.242e18
         self.optimize_energy(E)
         
     def node_counter(self,R):
@@ -93,20 +100,19 @@ class Numerov_Cooley():
             E+=dE
             counter+=1
         print('energy converged after {} iterations'.format(counter))
-        self.nstates+=1
-        self.E.append(E)
-        self.wf.append(R)
         nodes=self.node_counter(R)
-        self.nodes.append(nodes)
-        
+        if nodes not in self.nodes:
+            self.nodes.append(nodes)
+            self.nstates+=1
+            self.E.append(E)
+            self.wf.append(R)
+
     def integrator(self,E):
-        k=0.00054858/(100*6.0221367*6.6260755/(8*9.869604401089358*2.99792458))
-        k=1
         Yin=np.zeros(self.npts)
         Rin=np.zeros(self.npts)
         Yout=np.zeros(self.npts)
         Rout=np.zeros(self.npts)
-        U=k*(self.pot-E)
+        U=self.pot-E
         counter=2
         for i in self.pot[::-1][:-2]:
             if i>E:
@@ -115,7 +121,6 @@ class Numerov_Cooley():
             counter+=1
         else:
             xlim=self.npts-2
-        print(xlim)
         small_val=0.0000005
         Rout[1]=small_val
         Rin[-2]=small_val
@@ -140,24 +145,17 @@ class Numerov_Cooley():
             Yin[i]=tempvar
             Rin[i]=Yin[i]/(1-self.dx**2/12*U[i])
         maxima=self.find_maxima(Rout)
-        print(len(maxima))
         mp=maxima[np.argmax(np.array([Rout[i] for i in maxima]))]
-        print(mp)
-        print(Rin,Rout)
-        print(np.max(Rin[mp]),np.max(Rout[mp]))
         Rin/=Rin[mp]
         Rout/=Rout[mp]
         R=np.zeros(self.npts)
         R[:mp]+=Rout[:mp]
         R[mp+1:]+=Rin[mp+1:]
         R[mp]=1.0
-        print(R)
         Yout=R[mp-1]*(1-self.dx**2/12*U[mp-1])
         Yin=R[mp+1]*(1-self.dx**2/12*U[mp+1])
         Ym=R[mp]*(1-self.dx**2/12*U[mp])
-        print(Yout,Yin,Ym)
         dE=((-Yout+2*Ym-Yin)/self.dx**2+U[mp])/(sum(R**2))
-        print(E,dE)
         
         return dE,R
     
@@ -172,9 +170,8 @@ class Numerov_Cooley():
     
     def cleanup_output(self):
         for i in range(self.nstates):
-            self.E[i]*=27.2114
-            self.pot*=27.2114
-            self.x/=18.8973
+            self.E[i]*=6.242e18/self.k
+        self.pot*=6.242e18
     
     def plot_output(self):
         plt.figure()
