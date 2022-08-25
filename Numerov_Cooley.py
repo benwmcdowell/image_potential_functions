@@ -1,11 +1,13 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import warnings
 
 #d is the tip-sample distance in nm
 #V is the voltage bias in eV
 #Vmin is the minimum potential of the substrate periodic potential in eV
 #zm is the range of the potential set to a constant value near the sumple interface (nm)
-def build_potential_no_dielectric(n,zmin,w,Vg,V0,d,phi_t,phi_s,V,zm):
+def build_potential_no_dielectric(n,zmin,w,Vg,V0,d,phi,V,zm):
+    warnings.filterwarnings("ignore",category=RuntimeWarning)
     d*=1e-9 #convert nm to m
     zm*=1e-9 #convert nm to m
     zmin*=1e-9 #convert nm to m
@@ -18,10 +20,9 @@ def build_potential_no_dielectric(n,zmin,w,Vg,V0,d,phi_t,phi_s,V,zm):
     e=1.60217663e-19
     
     x=np.linspace(-zmin,d,n)
-    field_pot=phi-V*(d-x)/d
+    field_pot=phi+V*(x)/d
     image_pot_sub=-e**2/4/x/e0/np.pi
     image_pot_tip=-e**2/4/abs(d-x)/e0/np.pi
-    #image_pot_tip=np.zeros(n)
     pot=field_pot+image_pot_sub+image_pot_tip
     pot=np.nan_to_num(pot)
     
@@ -43,6 +44,8 @@ def build_potential_no_dielectric(n,zmin,w,Vg,V0,d,phi_t,phi_s,V,zm):
     
     #convert x back to nm
     x*=1e9
+    
+    warnings.filterwarnings("default",category=RuntimeWarning)
     
     return x,pot
 
