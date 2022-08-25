@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 #d is the tip-sample distance in nm
 #V is the voltage bias in eV
@@ -20,6 +21,7 @@ def build_potential_no_dielectric(n,zmin,w,Vg,V0,d,phi,V,zm):
     field_pot=phi-V*(d-x)/d
     image_pot_sub=-e**2/4/x/e0/np.pi
     image_pot_tip=-e**2/4/abs(d-x)/e0/np.pi
+    #image_pot_tip=np.zeros(n)
     pot=field_pot+image_pot_sub+image_pot_tip
     pot=np.nan_to_num(pot)
     
@@ -41,18 +43,36 @@ def build_potential_no_dielectric(n,zmin,w,Vg,V0,d,phi,V,zm):
     
     #convert x back to nm
     x*=1e9
+    
     return x,pot
 
+def harmonic_test(npts,xmin,xmax,w):
+    
+    x=np.linspace(xmin,xmax,npts)
+    m=9.11e-31
+    pot=(1/2)*m*w**2*x**2
+    
+    return x,pot
+
+def particle_in_a_box(n,L):
+    
+    x=np.linspace(-L/2,L/2,n)
+    y=np.zeros(n)
+    
+    return x,y
+
 class Numerov_Cooley():
-    def __init__(self,x,pot,tol=0.0001):
+    def __init__(self,x,pot,tol=0.0000001):
         self.npts=len(x)
-        self.x=x
-        self.pot=pot
+        self.x=x*18.8973
+        self.pot=pot*2.294e17
+        self.pot-=np.min(self.pot)
         self.dx=(np.max(self.x)-np.min(self.x))/len(self.x)
         self.wf=[]
         self.E=[]
         self.tol=tol
         self.nodes=[]
+        self.nstates=0
         
     def main(self,E):
         self.optimize_energy(E)
@@ -68,37 +88,98 @@ class Numerov_Cooley():
     def optimize_energy(self,E):
         dE=self.tol+1
         counter=0
-        while dE<self.tol:
+        while np.abs(dE)>self.tol:
             dE,R=self.integrator(E)
+            E+=dE
             counter+=1
+        print('energy converged after {} iterations'.format(counter))
+        self.nstates+=1
         self.E.append(E)
         self.wf.append(R)
         nodes=self.node_counter(R)
         self.nodes.append(nodes)
         
     def integrator(self,E):
+        k=0.00054858/(100*6.0221367*6.6260755/(8*9.869604401089358*2.99792458))
+        k=1
         Yin=np.zeros(self.npts)
         Rin=np.zeros(self.npts)
         Yout=np.zeros(self.npts)
         Rout=np.zeros(self.npts)
-        counter=0
-        for i in self.pot[::-1]:
+        U=k*(self.pot-E)
+        counter=2
+        for i in self.pot[::-1][:-2]:
             if i>E:
                 xlim=self.npts-counter
                 break
             counter+=1
+        else:
+            xlim=self.npts-2
+        print(xlim)
+        small_val=0.0000005
+        Rout[1]=small_val
+        Rin[-2]=small_val
+        Yout[1]=small_val*(1-self.dx**2/12*U[1])
+        Yin[-2]=small_val*(1-self.dx**2/12*U[-2])
         for i in range(2,xlim):
-            Rout[i]=self.dx**2*(self.pot[i-1]-E)*Rout[i-1]
-            i=self.npts-i
-            Rin[i]=self.dx**2*(self.pot[i+1]-E)*Rin[i+1]
-        mp=self.argmax(Rout)
+            tempvar=self.dx**2*U[i-1]*Rout[i-1]+2*Yout[i-1]-Yout[i-2]
+            if np.isnan(tempvar):
+                Yout/=1e100
+                Rout/=1e100
+                tempvar=self.dx**2*U[i-1]*Rout[i-1]+2*Yout[i-1]-Yout[i-2]
+            Yout[i]=tempvar
+            Rout[i]=Yout[i]/(1-self.dx**2/12*U[i])
+            
+            i=self.npts-i-1
+            
+            tempvar=self.dx**2*U[i+1]*Rin[i+1]+2*Yin[i+1]-Yin[i+2]
+            if np.isnan(tempvar):
+                Yin/=1e100
+                Rin/=1e100
+                tempvar=self.dx**2*U[i+1]*Rin[i+1]+2*Yin[i+1]-Yin[i+2]
+            Yin[i]=tempvar
+            Rin[i]=Yin[i]/(1-self.dx**2/12*U[i])
+        maxima=self.find_maxima(Rout)
+        print(len(maxima))
+        mp=maxima[np.argmax(np.array([Rout[i] for i in maxima]))]
+        print(mp)
+        print(Rin,Rout)
+        print(np.max(Rin[mp]),np.max(Rout[mp]))
         Rin/=Rin[mp]
         Rout/=Rout[mp]
-        R=Rin+Rout
+        R=np.zeros(self.npts)
+        R[:mp]+=Rout[:mp]
+        R[mp+1:]+=Rin[mp+1:]
         R[mp]=1.0
-        Yout=R[mp-1]*(1-self.dx**2/12*(self.pot[mp-1]-E))
-        Yin=R[mp+1]*(1-self.dx**2/12*(self.pot[mp+1]-E))
-        Ym=R[mp]*(1-self.dx**2/12*(self.pot[mp]-E))
-        dE=(-Yout+2*Ym-Yin)/self.dx**2+(self.pot[mp]-E)*R[mp]/(sum(R)*self.dx)
+        print(R)
+        Yout=R[mp-1]*(1-self.dx**2/12*U[mp-1])
+        Yin=R[mp+1]*(1-self.dx**2/12*U[mp+1])
+        Ym=R[mp]*(1-self.dx**2/12*U[mp])
+        print(Yout,Yin,Ym)
+        dE=((-Yout+2*Ym-Yin)/self.dx**2+U[mp])/(sum(R**2))
+        print(E,dE)
         
         return dE,R
+    
+    def find_maxima(self,R):
+        maxima=[]
+        for i in range(self.npts-1):
+            if R[i+1]-R[i]<0.0:
+                maxima.append(i)
+                
+        return maxima
+                
+    
+    def cleanup_output(self):
+        for i in range(self.nstates):
+            self.E[i]*=27.2114
+            self.pot*=27.2114
+            self.x/=18.8973
+    
+    def plot_output(self):
+        plt.figure()
+        plt.plot(self.x,self.pot,color='red',lw=2)
+        for i in range(len(self.E)):
+            plt.plot([self.x[0],self.x[-1]],[self.E[i] for j in range(2)],color='black',lw=2,linestyle='dashed')
+            plt.plot(self.x,self.wf[i]+self.E[i],color='black',lw=2)
+        plt.show()
