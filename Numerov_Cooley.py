@@ -174,7 +174,7 @@ class Numerov_Cooley():
     def cleanup_output(self):
         for i in range(self.nstates):
             self.E[i]*=6.242e18/self.k
-        self.pot*=6.242e18
+        self.pot*=6.242e18/self.k
     
     def plot_output(self):
         plt.figure()
