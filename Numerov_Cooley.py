@@ -27,12 +27,7 @@ def build_potential_no_dielectric(n,zmin,w,Vg,V0,d,phi,V,zm):
     pot=np.nan_to_num(pot)
     
     pot*=np.heaviside(x-zm,1)
-    Vmin=image_pot_sub[np.argmin(abs(x-zm))]
     pot+=np.heaviside((x-zm)*-1,0)*(-V0-Vg)
-    for i in range(len(x)):
-        if pot[i]<(V0-Vg):
-            max_index=i
-            break
     
     pot*=np.heaviside(x,1)
     bulk_pot=-Vg*np.cos(2*np.pi*x/w)-V0
@@ -74,7 +69,8 @@ class Numerov_Cooley():
         self.npts=len(x)
         self.x=x
         self.pot=pot*self.k
-        self.pot-=np.min(self.pot)
+        self.pot_shift=np.min(self.pot)
+        self.pot-=self.pot_shift
         self.dx=(np.max(self.x)-np.min(self.x))/len(self.x)
         self.wf=[]
         self.E=[]
@@ -85,6 +81,7 @@ class Numerov_Cooley():
     #E is the trial energy in eV
     def main(self,E):
         E*=self.k/6.242e18
+        #E+=np.min(self.pot)
         self.optimize_energy(E)
         
     def node_counter(self,R):
@@ -98,10 +95,19 @@ class Numerov_Cooley():
     def optimize_energy(self,E):
         dE=self.tol+1
         counter=0
+        if not hasattr(self,'opt_fig'):
+            self.opt_fig,self.opt_ax=plt.subplots(1,1)
+            self.opt_ax.set(xlabel='# of energy corrections', ylabel='trial eigenvalue / eV')
+        steps=[]
+        trial_energies=[]
         while np.abs(dE)>self.tol:
+            trial_energies.append(E)
+            steps.append(counter)
             dE,R=self.integrator(E)
             E+=dE
             counter+=1
+        self.opt_ax.plot(steps,np.array(trial_energies)*6.242e18/self.k,lw=2)
+        self.opt_fig.canvas.draw()
         print('energy converged after {} iterations'.format(counter))
         nodes=self.node_counter(R)
         if nodes not in self.nodes:
@@ -170,16 +176,41 @@ class Numerov_Cooley():
                 
         return maxima
                 
+    def overlay_Fermi_levels(self,Vb):
+        if not hasattr(self,'wf_fig'):
+            self.wf_fig,self.wf_ax=plt.subplots(1,1)
+            self.wf_ax.set(xlabel='position / nm', ylabel='energy / eV')
+            
+        mp=np.argmax(self.pot)
+            
+        counter=0
+        for i in range(mp+1):
+            if self.pot[i]<0.0:
+                counter+=1
+        self.wf_ax.plot(self.x[:counter+1],[0 for i in range(counter+1)],lw=2,color='blue')
+        
+        counter=0
+        for i in range(mp,self.npts):
+            if self.pot[i]<Vb:
+                counter+=1
+        self.wf_ax.plot(self.x[self.npts-counter-1:],[Vb for i in range(counter+1)],lw=2,color='blue',label='$E_F$')
+        
+        self.wf_fig.canvas.draw()
     
     def cleanup_output(self):
         for i in range(self.nstates):
             self.E[i]*=6.242e18/self.k
         self.pot*=6.242e18/self.k
+        self.pot_shift*=6.242e18/self.k
+        self.pot+=self.pot_shift
     
     def plot_output(self):
-        plt.figure()
-        plt.plot(self.x,self.pot,color='red',lw=2)
+        if not hasattr(self,'wf_fig'):
+            self.wf_fig,self.wf_ax=plt.subplots(1,1)
+            self.wf_ax.set(xlabel='position / nm', ylabel='energy / eV')
+        self.wf_ax.plot(self.x,self.pot,color='red',lw=2,label='potential')
         for i in range(len(self.E)):
-            plt.plot([self.x[0],self.x[-1]],[self.E[i] for j in range(2)],color='black',lw=2,linestyle='dashed')
-            plt.plot(self.x,self.wf[i]+self.E[i],color='black',lw=2)
-        plt.show()
+            self.wf_ax.plot([self.x[0],self.x[-1]],[self.E[i] for j in range(2)],color='black',lw=2,linestyle='dashed')
+            self.wf_ax.plot(self.x,self.wf[i]+self.E[i],color='black',lw=2)
+        self.wf_ax.legend()
+        self.wf_fig.canvas.draw()
