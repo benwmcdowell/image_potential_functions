@@ -17,12 +17,35 @@ def build_potential_no_dielectric(n,zmin,w,Vg,V0,d,phi,V,zm):
     V0*=1.60218e-19 #eV to J
     phi*=1.60218e-19 #eV to J
     e0=8.8541878128e-12 #F/m
-    e=1.60217663e-19
+    e=1.60217663e-19 #C
     
     x=np.linspace(-zmin,d,n)
     field_pot=phi+V*(x)/d
-    image_pot_sub=-e**2/4/x/e0/np.pi
-    image_pot_tip=-e**2/4/abs(d-x)/e0/np.pi
+    
+    image_pot_sub=-e**2/4/e0/np.pi/2/2
+    image_pot_tip=-e**2/4/e0/np.pi/2/2
+    image_pot_sub_sum=np.zeros(n)
+    image_pot_tip_sum=np.zeros(n)
+    sum_threshold=1/10000
+    for i in range(np.argmin(abs(x)),n):
+        dT=1
+        dS=1
+        
+        counter=0
+        while image_pot_sub_sum[i]*sum_threshold<dS:
+            dS=(-1)**counter/(x[i]+counter*d)
+            image_pot_sub_sum[i]+=dS
+            counter+=1
+            
+        counter=0
+        while image_pot_tip_sum[i]*sum_threshold<dT:
+            dT=(-1)**counter/(abs(d-x[i])+counter*d)
+            image_pot_tip_sum[i]+=dT
+            counter+=1
+            
+    image_pot_sub*=image_pot_sub_sum
+    image_pot_tip*=image_pot_tip_sum
+    
     pot=field_pot+image_pot_sub+image_pot_tip
     pot=np.nan_to_num(pot)
     
@@ -61,7 +84,7 @@ def particle_in_a_box(n,L):
 
 class Numerov_Cooley():
     #x is in nm, pot is in J
-    def __init__(self,x,pot,tol=0.0000001):
+    def __init__(self,x,pot,tol=0.0000001,pot_type='default'):
         h=6.626e-34/np.pi/2 #J*s
         m=9.11e-31 #kg
         self.k=2*m/h**2*1e-18 #1/nm**2/J
@@ -77,16 +100,21 @@ class Numerov_Cooley():
         self.tol=tol
         self.nodes=[]
         self.nstates=0
+        self.pot_type=pot_type
         
     #E is the trial energy in eV
     def main(self,E):
         E*=self.k/6.242e18
-        #E+=np.min(self.pot)
+        E-=self.pot_shift
         self.optimize_energy(E)
         
     def node_counter(self,R):
         counter=0
-        for i in range(self.npts-1):
+        if self.pot_type=='default':
+            search_range=range(np.argmin(abs(self.x)),np.argmax(self.pot))
+        else:
+            search_range=range(self.npts-1)
+        for i in search_range:
             if R[i]*R[i+1]<0:
                 counter+=1
         
@@ -106,11 +134,26 @@ class Numerov_Cooley():
             dE,R=self.integrator(E)
             E+=dE
             counter+=1
-        self.opt_ax.plot(steps,np.array(trial_energies)*6.242e18/self.k,lw=2)
+        self.opt_ax.plot(steps,(np.array(trial_energies)+self.pot_shift)*6.242e18/self.k,lw=2)
         self.opt_fig.canvas.draw()
         print('energy converged after {} iterations'.format(counter))
         nodes=self.node_counter(R)
         if nodes not in self.nodes:
+        #if len(self.E)>0:
+        #    energy_check=True
+        #    new_val=False
+        #else:
+        #    energy_check=False
+        #    new_val=True
+        #counter=0
+        #while energy_check:
+        #    if E>self.E[counter]-self.tol and E<self.E[counter]+self.tol:
+        #        energy_check=False
+        #    counter+=1
+        #    if counter==len(self.E):
+        #        new_val=True
+        #        energy_check=False
+        #if new_val:
             self.nodes.append(nodes)
             self.nstates+=1
             self.E.append(E)
@@ -198,10 +241,11 @@ class Numerov_Cooley():
         self.wf_fig.canvas.draw()
     
     def cleanup_output(self):
+        self.pot_shift*=6.242e18/self.k
         for i in range(self.nstates):
             self.E[i]*=6.242e18/self.k
+            self.E[i]+=self.pot_shift
         self.pot*=6.242e18/self.k
-        self.pot_shift*=6.242e18/self.k
         self.pot+=self.pot_shift
     
     def plot_output(self):
