@@ -57,8 +57,10 @@ def build_potential_no_dielectric(n,zmin,w,Vg,V0,d,phi,V,zm):
     pot[:np.argmin(abs(x))+1]+=bulk_pot[:np.argmin(abs(x))+1]
     
     for i in range(len(x)):
-        if pot[i]<(-V0-Vg):
+        if pot[i]<(-V0-Vg) and x[i]<d/2:
             pot[i]=(-V0-Vg)
+        elif pot[i]<(-V0-Vg+V) and x[i]>d/2:
+            pot[i]=(-V0-Vg+V)
     
     #convert x back to nm
     x*=1e9
@@ -84,7 +86,7 @@ def particle_in_a_box(n,L):
 
 class Numerov_Cooley():
     #x is in nm, pot is in J
-    def __init__(self,x,pot,tol=0.0000001,pot_type='default'):
+    def __init__(self,x,pot,tol=0.0000001,pot_type='default',filter_mode='nodes'):
         h=6.626e-34/np.pi/2 #J*s
         m=9.11e-31 #kg
         self.k=2*m/h**2*1e-18 #1/nm**2/J
@@ -101,6 +103,7 @@ class Numerov_Cooley():
         self.nodes=[]
         self.nstates=0
         self.pot_type=pot_type
+        self.filter_mode=filter_mode
         
     #E is the trial energy in eV
     def main(self,E):
@@ -138,22 +141,33 @@ class Numerov_Cooley():
         self.opt_fig.canvas.draw()
         print('energy converged after {} iterations'.format(counter))
         nodes=self.node_counter(R)
-        if nodes not in self.nodes:
-        #if len(self.E)>0:
-        #    energy_check=True
-        #    new_val=False
-        #else:
-        #    energy_check=False
-        #    new_val=True
-        #counter=0
-        #while energy_check:
-        #    if E>self.E[counter]-self.tol and E<self.E[counter]+self.tol:
-        #        energy_check=False
-        #    counter+=1
-        #    if counter==len(self.E):
-        #        new_val=True
-        #        energy_check=False
-        #if new_val:
+        if self.filter_mode=='nodes':
+            if nodes not in self.nodes:
+                self.nodes.append(nodes)
+                self.nstates+=1
+                self.E.append(E)
+                self.wf.append(R)
+        elif self.filter_mode=='energy':
+            if len(self.E)>0:
+                energy_check=True
+                new_val=False
+            else:
+                energy_check=False
+                new_val=True
+            counter=0
+            while energy_check:
+                if E>self.E[counter]-self.tol and E<self.E[counter]+self.tol:
+                    energy_check=False
+                counter+=1
+                if counter==len(self.E):
+                    new_val=True
+                    energy_check=False
+            if new_val:
+                self.nodes.append(nodes)
+                self.nstates+=1
+                self.E.append(E)
+                self.wf.append(R)
+        elif self.filter_mode=='none':
             self.nodes.append(nodes)
             self.nstates+=1
             self.E.append(E)
