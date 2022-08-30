@@ -86,7 +86,7 @@ def particle_in_a_box(n,L):
 
 class Numerov_Cooley():
     #x is in nm, pot is in J
-    def __init__(self,x,pot,tol=0.0000001,pot_type='default',filter_mode='nodes'):
+    def __init__(self,x,pot,tol=0.0000001,pot_type='default',filter_mode='nodes',suppress_output=True):
         h=6.626e-34/np.pi/2 #J*s
         m=9.11e-31 #kg
         self.k=2*m/h**2*1e-18 #1/nm**2/J
@@ -104,6 +104,7 @@ class Numerov_Cooley():
         self.nstates=0
         self.pot_type=pot_type
         self.filter_mode=filter_mode
+        self.suppress_output=suppress_output
         
     #E is the trial energy in eV
     def main(self,E):
@@ -139,7 +140,8 @@ class Numerov_Cooley():
             counter+=1
         self.opt_ax.plot(steps,(np.array(trial_energies)+self.pot_shift)*6.242e18/self.k,lw=2)
         self.opt_fig.canvas.draw()
-        print('energy converged after {} iterations'.format(counter))
+        if not self.suppress_output:
+            print('energy converged after {} iterations'.format(counter))
         nodes=self.node_counter(R)
         if self.filter_mode=='nodes':
             if nodes not in self.nodes:
