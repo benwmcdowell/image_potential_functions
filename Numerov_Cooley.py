@@ -6,7 +6,7 @@ import warnings
 #V is the voltage bias in eV
 #Vmin is the minimum potential of the substrate periodic potential in eV
 #zm is the range of the potential set to a constant value near the sumple interface (nm)
-def build_potential_no_dielectric(n,zmin,w,Vg,V0,d,phi,V,zm):
+def build_potential_with_dielectric(n,zmin,w,Vg,V0,d,phi,V,zm):
     warnings.filterwarnings("ignore",category=RuntimeWarning)
     d*=1e-9 #convert nm to m
     zm*=1e-9 #convert nm to m
@@ -21,6 +21,74 @@ def build_potential_no_dielectric(n,zmin,w,Vg,V0,d,phi,V,zm):
     
     x=np.linspace(-zmin,d,n)
     field_pot=phi+V*(x)/d
+    
+    image_pot_sub=-e**2/4/e0/np.pi/2/2
+    image_pot_tip=-e**2/4/e0/np.pi/2/2
+    image_pot_sub_sum=np.zeros(n)
+    image_pot_tip_sum=np.zeros(n)
+    sum_threshold=1/10000
+    for i in range(np.argmin(abs(x)),n):
+        dT=1
+        dS=1
+        
+        counter=0
+        while image_pot_sub_sum[i]*sum_threshold<dS:
+            dS=(-1)**counter/(x[i]+counter*d)
+            image_pot_sub_sum[i]+=dS
+            counter+=1
+            
+        counter=0
+        while image_pot_tip_sum[i]*sum_threshold<dT:
+            dT=(-1)**counter/(abs(d-x[i])+counter*d)
+            image_pot_tip_sum[i]+=dT
+            counter+=1
+            
+    image_pot_sub*=image_pot_sub_sum
+    image_pot_tip*=image_pot_tip_sum
+    
+    pot=field_pot+image_pot_sub+image_pot_tip
+    pot=np.nan_to_num(pot)
+    
+    pot*=np.heaviside(x-zm,1)
+    pot+=np.heaviside((x-zm)*-1,0)*(-V0-Vg)
+    
+    pot*=np.heaviside(x,1)
+    bulk_pot=-Vg*np.cos(2*np.pi*x/w)-V0
+    pot[:np.argmin(abs(x))+1]+=bulk_pot[:np.argmin(abs(x))+1]
+    
+    for i in range(len(x)):
+        if pot[i]<(-V0-Vg) and x[i]<d/2:
+            pot[i]=(-V0-Vg)
+        elif pot[i]<(-V0-Vg+V) and x[i]>d/2:
+            pot[i]=(-V0-Vg+V)
+    
+    #convert x back to nm
+    x*=1e9
+    
+    warnings.filterwarnings("default",category=RuntimeWarning)
+    
+    return x,pot
+
+#d is the tip-sample distance in nm
+#V is the voltage bias in eV
+#Vmin is the minimum potential of the substrate periodic potential in eV
+#zm is the range of the potential set to a constant value near the sumple interface (nm)
+def build_potential_no_dielectric(n,zmin,w,Vg,V0,d,phis,phit,V,zm):
+    warnings.filterwarnings("ignore",category=RuntimeWarning)
+    d*=1e-9 #convert nm to m
+    zm*=1e-9 #convert nm to m
+    zmin*=1e-9 #convert nm to m
+    w*=1e-9 #convert nm to m
+    Vg*=1.60218e-19 #eV to J
+    V*=1.60218e-19 #eV to J
+    V0*=1.60218e-19 #eV to J
+    phis*=1.60218e-19 #eV to J
+    phit*=1.60218e-19 #eV to J
+    e0=8.8541878128e-12 #F/m
+    e=1.60217663e-19 #C
+    
+    x=np.linspace(-zmin,d,n)
+    field_pot=phis+(phit-phis+V)*x/d
     
     image_pot_sub=-e**2/4/e0/np.pi/2/2
     image_pot_tip=-e**2/4/e0/np.pi/2/2
@@ -101,6 +169,7 @@ class Numerov_Cooley():
         self.E=[]
         self.tol=tol
         self.nodes=[]
+        self.xavg=[]
         self.nstates=0
         self.pot_type=pot_type
         self.filter_mode=filter_mode
@@ -143,12 +212,24 @@ class Numerov_Cooley():
         if not self.suppress_output:
             print('energy converged after {} iterations'.format(counter))
         nodes=self.node_counter(R)
+        R=self.normalize_wf(R)
+        xavg=self.avg_pos(R)
+        
         if self.filter_mode=='nodes':
             if nodes not in self.nodes:
                 self.nodes.append(nodes)
                 self.nstates+=1
                 self.E.append(E)
                 self.wf.append(R)
+                self.xavg.append(xavg)
+            if nodes in self.nodes:
+                i=self.nodes.index(nodes)
+                if abs(xavg)<abs(self.xavg[i]):
+                    self.nodes[i]=nodes
+                    self.E[i]=E
+                    self.wf[i]=R
+                    self.xavg[i]=xavg
+                    
         elif self.filter_mode=='energy':
             if len(self.E)>0:
                 energy_check=True
@@ -169,11 +250,21 @@ class Numerov_Cooley():
                 self.nstates+=1
                 self.E.append(E)
                 self.wf.append(R)
+                self.xavg.append(xavg)
+            else:
+                i=np.argmin(abs(np.array(self.E)-E))
+                if abs(xavg)<abs(self.xavg[i]):
+                    self.nodes[i]=nodes
+                    self.E[i]=E
+                    self.wf[i]=R
+                    self.xavg[i]=xavg
+                    
         elif self.filter_mode=='none':
             self.nodes.append(nodes)
             self.nstates+=1
             self.E.append(E)
             self.wf.append(R)
+            self.xavg.append(xavg)
 
     def integrator(self,E):
         Yin=np.zeros(self.npts)
@@ -212,8 +303,14 @@ class Numerov_Cooley():
                 tempvar=self.dx**2*U[i+1]*Rin[i+1]+2*Yin[i+1]-Yin[i+2]
             Yin[i]=tempvar
             Rin[i]=Yin[i]/(1-self.dx**2/12*U[i])
-        maxima=self.find_maxima(Rout)
-        mp=maxima[np.argmax(np.array([Rout[i] for i in maxima]))]
+        try:
+            maxima=self.find_maxima(Rout)
+            mp=maxima[np.argmax(np.array([Rout[i] for i in maxima]))]
+        except ValueError:
+            self.pot_type='temp'
+            maxima=self.find_maxima(Rout)
+            mp=maxima[np.argmax(np.array([Rout[i] for i in maxima]))]
+            self.pot_type='default'
         Rin/=Rin[mp]
         Rout/=Rout[mp]
         R=np.zeros(self.npts)
@@ -227,9 +324,24 @@ class Numerov_Cooley():
         
         return dE,R
     
+    def normalize_wf(self,R):
+        R/=np.linalg.norm(R)
+        
+        return R
+    
+    def avg_pos(self,R):
+        xavg=sum(self.x*R)
+        
+        return xavg
+    
     def find_maxima(self,R):
+        if self.pot_type=='default':
+            mpmin=np.argmin(abs(self.x-1))
+        else:
+            mpmin=0
+            
         maxima=[]
-        for i in range(self.npts-1):
+        for i in range(mpmin,self.npts-1-mpmin):
             if R[i+1]-R[i]<0.0:
                 maxima.append(i)
                 
