@@ -6,21 +6,25 @@ import warnings
 #V is the voltage bias in eV
 #Vmin is the minimum potential of the substrate periodic potential in eV
 #zm is the range of the potential set to a constant value near the sumple interface (nm)
-def build_potential_with_dielectric(n,zmin,w,Vg,V0,d,phi,V,zm):
+def build_potential_with_dielectric(n,zmin,w,Vg,V0,d,phis,phit,V,zm,t,e1):
     warnings.filterwarnings("ignore",category=RuntimeWarning)
     d*=1e-9 #convert nm to m
     zm*=1e-9 #convert nm to m
     zmin*=1e-9 #convert nm to m
     w*=1e-9 #convert nm to m
+    t*=1e-9 #convert nm to m
     Vg*=1.60218e-19 #eV to J
     V*=1.60218e-19 #eV to J
     V0*=1.60218e-19 #eV to J
-    phi*=1.60218e-19 #eV to J
+    phis*=1.60218e-19 #eV to J
+    phit*=1.60218e-19 #eV to J
     e0=8.8541878128e-12 #F/m
+    e1*=e0
     e=1.60217663e-19 #C
     
     x=np.linspace(-zmin,d,n)
-    field_pot=phi+V*(x)/d
+    edrop=V*(e0*(t))/(e1*(d-t)+e0*(t))
+    field_pot=phis+(phit-phis)*x/d+((V-edrop)/(d-t)*(x-t)+edrop)*np.heaviside(x-t,1)+(edrop*x/t)*np.heaviside(t-x,0)
     
     image_pot_sub=-e**2/4/e0/np.pi/2/2
     image_pot_tip=-e**2/4/e0/np.pi/2/2
@@ -212,7 +216,7 @@ class Numerov_Cooley():
         if not self.suppress_output:
             print('energy converged after {} iterations'.format(counter))
         nodes=self.node_counter(R)
-        R=self.normalize_wf(R)
+        #R=self.normalize_wf(R)
         xavg=self.avg_pos(R)
         
         if self.filter_mode=='nodes':
@@ -330,7 +334,7 @@ class Numerov_Cooley():
         return R
     
     def avg_pos(self,R):
-        xavg=sum(self.x*R)
+        xavg=sum(self.x*R/np.linalg.norm(R))
         
         return xavg
     
