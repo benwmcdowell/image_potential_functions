@@ -6,7 +6,7 @@ import warnings
 #V is the voltage bias in eV
 #Vmin is the minimum potential of the substrate periodic potential in eV
 #zm is the range of the potential set to a constant value near the sumple interface (nm)
-def build_potential_with_dielectric(n,zmin,w,Vg,V0,d,phis,phit,V,zm,t,e1):
+def build_potential_with_dielectric(n,zmin,w,Vg,V0,d,phis,phit,V,zm,t,e1,Vcbm):
     warnings.filterwarnings("ignore",category=RuntimeWarning)
     d*=1e-9 #convert nm to m
     zm*=1e-9 #convert nm to m
@@ -18,6 +18,7 @@ def build_potential_with_dielectric(n,zmin,w,Vg,V0,d,phis,phit,V,zm,t,e1):
     V0*=1.60218e-19 #eV to J
     phis*=1.60218e-19 #eV to J
     phit*=1.60218e-19 #eV to J
+    Vcbm*=1.60218e-19 #eV to J
     e0=8.8541878128e-12 #F/m
     e1*=e0
     e=1.60217663e-19 #C
@@ -30,19 +31,22 @@ def build_potential_with_dielectric(n,zmin,w,Vg,V0,d,phis,phit,V,zm,t,e1):
     image_pot_tip=-e**2/4/e0/np.pi/2/2
     image_pot_sub_sum=np.zeros(n)
     image_pot_tip_sum=np.zeros(n)
-    sum_threshold=1/10000
+    sum_threshold=1/1000
     for i in range(np.argmin(abs(x)),n):
         dT=1
         dS=1
+        B=(e1/e0-1)/(e1/e0+1)
         
-        counter=0
-        while image_pot_sub_sum[i]*sum_threshold<dS:
-            dS=(-1)**counter/(x[i]+counter*d)
+        counter=1
+        image_pot_sub_sum[i]+=B/(x[i]-t)
+        k=-(1-B**2)/B
+        while abs(image_pot_sub_sum[i]*sum_threshold)<abs(dS):
+            dS=k*(-B)**counter/(x[i]-t+counter*d)
             image_pot_sub_sum[i]+=dS
             counter+=1
             
         counter=0
-        while image_pot_tip_sum[i]*sum_threshold<dT:
+        while abs(image_pot_tip_sum[i]*sum_threshold)<abs(dT):
             dT=(-1)**counter/(abs(d-x[i])+counter*d)
             image_pot_tip_sum[i]+=dT
             counter+=1
@@ -50,13 +54,19 @@ def build_potential_with_dielectric(n,zmin,w,Vg,V0,d,phis,phit,V,zm,t,e1):
     image_pot_sub*=image_pot_sub_sum
     image_pot_tip*=image_pot_tip_sum
     
-    pot=field_pot+image_pot_sub+image_pot_tip
+    image_sum=image_pot_tip+image_pot_sub
+    for i in range(len(x)):
+        if x[i]>0 and x[i]<t:
+            image_sum[i]=Vcbm
+    
+    pot=field_pot+image_sum
     pot=np.nan_to_num(pot)
     
-    pot*=np.heaviside(x-zm,1)
-    pot+=np.heaviside((x-zm)*-1,0)*(-V0-Vg)
-    
     pot*=np.heaviside(x,1)
+    tempvar=pot[np.argmin(abs(x-t-zm))]
+    for i in range(len(x)):
+        if x[i]>t and x[i]<t+zm:
+            pot[i]=tempvar
     bulk_pot=-Vg*np.cos(2*np.pi*x/w)-V0
     pot[:np.argmin(abs(x))+1]+=bulk_pot[:np.argmin(abs(x))+1]
     
@@ -70,7 +80,9 @@ def build_potential_with_dielectric(n,zmin,w,Vg,V0,d,phis,phit,V,zm,t,e1):
     x*=1e9
     
     warnings.filterwarnings("default",category=RuntimeWarning)
-    
+    plt.figure()
+    plt.plot(x,pot)
+    plt.show()
     return x,pot
 
 #d is the tip-sample distance in nm
