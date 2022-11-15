@@ -367,8 +367,13 @@ class Numerov_Cooley():
         if not hasattr(self,'wf_fig'):
             self.wf_fig,self.wf_ax=plt.subplots(1,1)
             self.wf_ax.set(xlabel='position / nm', ylabel='energy / eV')
-            
-        mp=np.argmax(self.pot)
+        
+        if self.pot_type=='default':
+            for i in range(2,self.npts-1):
+                if self.pot[self.npts-i]<self.pot[self.npts-i+1] and self.pot[self.npts-i]>self.pot[self.npts-i-1]:
+                    mp=i
+        else:
+            mp=np.argmax(self.pot)
             
         counter=0
         for i in range(mp+1):
