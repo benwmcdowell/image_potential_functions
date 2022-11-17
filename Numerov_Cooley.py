@@ -188,6 +188,7 @@ class Numerov_Cooley():
         self.pot_type=pot_type
         self.filter_mode=filter_mode
         self.suppress_output=suppress_output
+        self.max_dE=1.0
         
     #E is the trial energy in eV
     def main(self,E):
@@ -219,6 +220,8 @@ class Numerov_Cooley():
             trial_energies.append(E)
             steps.append(counter)
             dE,R=self.integrator(E)
+            if dE>self.max_dE:
+                dE=self.max_dE
             E+=dE
             counter+=1
         self.opt_ax.plot(steps,(np.array(trial_energies)+self.pot_shift)*6.242e18/self.k,lw=2)
