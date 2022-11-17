@@ -80,9 +80,7 @@ def build_potential_with_dielectric(n,zmin,w,Vg,V0,d,phis,phit,V,zm,t,e1,Vcbm):
     x*=1e9
     
     warnings.filterwarnings("default",category=RuntimeWarning)
-    plt.figure()
-    plt.plot(x,pot)
-    plt.show()
+
     return x,pot
 
 #d is the tip-sample distance in nm
