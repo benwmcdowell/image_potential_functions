@@ -23,6 +23,8 @@ def build_potential_with_dielectric(n,zmin,w,Vg,V0,d,phis,phit,V,zm,t,e1,Vcbm):
     e1*=e0
     e=1.60217663e-19 #C
     
+    #reference Vcbm to field potential
+    Vcbm-=phis    
     x=np.linspace(-zmin,d,n)
     edrop=V*(e0*(t))/(e1*(d-t)+e0*(t))
     field_pot=phis+(phit-phis)*x/d+((V-edrop)/(d-t)*(x-t)+edrop)*np.heaviside(x-t,1)+(edrop*x/t)*np.heaviside(t-x,0)
