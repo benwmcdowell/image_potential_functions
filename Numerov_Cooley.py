@@ -204,17 +204,14 @@ class Numerov_Cooley():
     def loop_main(self,initial,final,nsteps):
         counter=0
         start=time.time()
-        percentage_counter=[25,50,75]
+        percentage_counter=np.array([25,50,75,100])
+        percentage_counter=np.round(percentage_counter/100*(nsteps-1))
         for i in np.linspace(initial,final,nsteps):
             self.main(i)
             counter+=1
             
-            if round(i/(nsteps-1)*100)%25==0 and round(i/(nsteps-1)*100) in percentage_counter:
-                print('{}% finished with range of trial eigenvalues. {} s elapsed so far'.format(round(i/(nsteps-1)*100),time.time()-start))
-                try:
-                    percentage_counter.remove(round(i/(nsteps-1)*100))
-                except ValueError:
-                    pass
+            if counter in percentage_counter:
+                print('{}% finished with range of trial eigenvalues. {} s elapsed so far'.format(round(counter/(nsteps-1)*100),time.time()-start))
         
     def node_counter(self,R):
         counter=0
