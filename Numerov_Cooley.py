@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import warnings
+import time
 
 #d is the tip-sample distance in nm
 #V is the voltage bias in eV
@@ -170,7 +171,7 @@ def particle_in_a_box(n,L):
 
 class Numerov_Cooley():
     #x is in nm, pot is in J
-    def __init__(self,x,pot,tol=0.0000001,pot_type='default',filter_mode='nodes',suppress_output=True):
+    def __init__(self,x,pot,tol=0.0000001,pot_type='default',filter_mode='nodes',suppress_output=True,max_steps=100):
         h=6.626e-34/np.pi/2 #J*s
         m=9.11e-31 #kg
         self.k=2*m/h**2*1e-18 #1/nm**2/J
@@ -191,12 +192,29 @@ class Numerov_Cooley():
         self.filter_mode=filter_mode
         self.suppress_output=suppress_output
         self.max_dE=1.0
+        self.max_steps=max_steps
         
     #E is the trial energy in eV
     def main(self,E):
         E*=self.k/6.242e18
         E-=self.pot_shift
         self.optimize_energy(E)
+        
+    #loops main function with trial eigenvalues ranging from initial to final in nsteps steps
+    def loop_main(self,initial,final,nsteps):
+        counter=0
+        start=time.time()
+        percentage_counter=[25,50,75]
+        for i in np.linspace(initial,final,nsteps):
+            self.main(i)
+            counter+=1
+            
+            if round(i/(nsteps-1)*100)%25==0 and round(i/(nsteps-1)*100) in percentage_counter:
+                print('{}% finished with range of trial eigenvalues. {} s elapsed so far'.format(round(i/(nsteps-1)*100),time.time()-start))
+                try:
+                    percentage_counter.remove(round(i/(nsteps-1)*100))
+                except ValueError:
+                    pass
         
     def node_counter(self,R):
         counter=0
@@ -219,6 +237,10 @@ class Numerov_Cooley():
         steps=[]
         trial_energies=[]
         while np.abs(dE)>self.tol:
+            if counter>self.max_steps:
+                if not self.suppress_output:
+                    print('max iterations exceeded')
+                break
             trial_energies.append(E)
             steps.append(counter)
             dE,R=self.integrator(E)
