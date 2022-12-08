@@ -171,7 +171,7 @@ def particle_in_a_box(n,L):
 
 class Numerov_Cooley():
     #x is in nm, pot is in J
-    def __init__(self,x,pot,tol=0.0000001,pot_type='default',filter_mode='nodes',suppress_output=True,max_steps=100):
+    def __init__(self,x,pot,tol=0.0000001,pot_type='default',filter_mode='nodes',suppress_output=True,max_steps=100,wf_height=1):
         h=6.626e-34/np.pi/2 #J*s
         m=9.11e-31 #kg
         self.k=2*m/h**2*1e-18 #1/nm**2/J
@@ -193,6 +193,7 @@ class Numerov_Cooley():
         self.suppress_output=suppress_output
         self.max_dE=1.0
         self.max_steps=max_steps
+        self.wf_height=wf_height
         
     #E is the trial energy in eV
     def main(self,E):
@@ -426,6 +427,6 @@ class Numerov_Cooley():
         self.wf_ax.plot(self.x,self.pot,color='red',lw=2,label='potential')
         for i in range(len(self.E)):
             self.wf_ax.plot([self.x[0],self.x[-1]],[self.E[i] for j in range(2)],color='black',lw=2,linestyle='dashed')
-            self.wf_ax.plot(self.x,self.wf[i]+self.E[i],color='black',lw=2)
+            self.wf_ax.plot(self.x,self.wf[i]/np.max(self.wf[i])*self.wf_height+self.E[i],color='black',lw=2)
         self.wf_ax.legend()
         self.wf_fig.canvas.draw()
