@@ -369,7 +369,7 @@ class Numerov_Cooley():
         return R
     
     def avg_pos(self,R):
-        xavg=sum(self.x*R/np.linalg.norm(R))
+        xavg=sum(self.x*(R/np.linalg.norm(R))**2)
         
         return xavg
     
@@ -428,5 +428,6 @@ class Numerov_Cooley():
         for i in range(len(self.E)):
             self.wf_ax.plot([self.x[0],self.x[-1]],[self.E[i] for j in range(2)],color='black',lw=2,linestyle='dashed')
             self.wf_ax.plot(self.x,self.wf[i]/np.max(self.wf[i])*self.wf_height+self.E[i],color='black',lw=2)
+            self.wf_ax.scatter(self.xavg[i],self.E[i],color='black',s=100)
         self.wf_ax.legend()
         self.wf_fig.canvas.draw()
