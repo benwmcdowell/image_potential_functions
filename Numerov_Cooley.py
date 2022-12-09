@@ -118,7 +118,7 @@ def build_potential_no_dielectric(n,zmin,w,Vg,V0,d,phis,phit,V,zm):
         
         counter=0
         while image_pot_sub_sum[i]*sum_threshold<dS:
-            dS=(-1)**counter/(x[i]+counter*d)
+            dS=(-1)**counter/(x[i]-zm+counter*d)
             image_pot_sub_sum[i]+=dS
             counter+=1
             
@@ -393,7 +393,7 @@ class Numerov_Cooley():
         
         if self.pot_type=='default':
             for i in range(2,self.npts-1):
-                if self.pot[self.npts-i]<self.pot[self.npts-i+1] and self.pot[self.npts-i]>self.pot[self.npts-i-1]:
+                if self.pot[self.npts-i]>self.pot[self.npts-i+1] and self.pot[self.npts-i]>self.pot[self.npts-i-1]:
                     mp=i
         else:
             mp=np.argmax(self.pot)
