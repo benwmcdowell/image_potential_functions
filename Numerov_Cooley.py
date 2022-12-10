@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import warnings
 import time
+import scipy
 
 #d is the tip-sample distance in nm
 #V is the voltage bias in eV
@@ -118,7 +119,7 @@ def build_potential_no_dielectric(n,zmin,w,Vg,V0,d,phis,phit,V,zm):
         
         counter=0
         while image_pot_sub_sum[i]*sum_threshold<dS:
-            dS=(-1)**counter/(x[i]-zm+counter*d)
+            dS=(-1)**counter/(x[i]+counter*d)
             image_pot_sub_sum[i]+=dS
             counter+=1
             
@@ -187,6 +188,7 @@ class Numerov_Cooley():
         self.tol=tol
         self.nodes=[]
         self.xavg=[]
+        self.peak_slope=[]
         self.nstates=0
         self.pot_type=pot_type
         self.filter_mode=filter_mode
@@ -297,6 +299,34 @@ class Numerov_Cooley():
                     self.E[i]=E
                     self.wf[i]=R
                     self.xavg[i]=xavg
+                    
+        elif self.filter_mode=='localized':
+            peaks=[]
+            peak_heights=[]
+            for i in range(1,np.argmin(abs(self.x))-1):
+                if abs(R[i])>abs(R[i-1]) and abs(R[i])>abs(R[i+1]):
+                    peaks.append(self.x[i])
+                    peak_heights.append(abs(R[i]))
+            if len(peak_heights)>1:
+                
+                def line_fit(x,a,b):
+                    return a*x+b
+                
+                params=scipy.optimize.curve_fit(line_fit,[i for i in range(len(peak_heights))],peak_heights)
+                if params[0][0]>0 and xavg>np.min(self.x)/2+abs(np.min(self.x)/10):
+                    self.nodes.append(nodes)
+                    self.nstates+=1
+                    self.E.append(E)
+                    self.wf.append(R)
+                    self.xavg.append(xavg)
+                    self.peak_slope.append(params[0][0])
+            else:
+                self.nodes.append(nodes)
+                self.nstates+=1
+                self.E.append(E)
+                self.wf.append(R)
+                self.xavg.append(xavg)
+                self.peak_slope.append(params[0][0])
                     
         elif self.filter_mode=='none':
             self.nodes.append(nodes)
