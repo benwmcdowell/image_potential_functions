@@ -231,7 +231,7 @@ class Numerov_Cooley():
     def optimize_energy(self,E):
         dE=self.tol+1
         counter=0
-        if not hasattr(self,'opt_fig'):
+        if not hasattr(self,'opt_fig') and not self.suppress_output:
             self.opt_fig,self.opt_ax=plt.subplots(1,1)
             self.opt_ax.set(xlabel='# of energy corrections', ylabel='trial eigenvalue / eV')
         steps=[]
@@ -248,9 +248,9 @@ class Numerov_Cooley():
                 dE=self.max_dE
             E+=dE
             counter+=1
-        self.opt_ax.plot(steps,(np.array(trial_energies)+self.pot_shift)*6.242e18/self.k,lw=2)
-        self.opt_fig.canvas.draw()
         if not self.suppress_output:
+            self.opt_ax.plot(steps,(np.array(trial_energies)+self.pot_shift)*6.242e18/self.k,lw=2)
+            self.opt_fig.canvas.draw()
             print('energy converged after {} iterations'.format(counter))
         nodes=self.node_counter(R)
         #R=self.normalize_wf(R)
