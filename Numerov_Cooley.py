@@ -424,7 +424,7 @@ class Numerov_Cooley():
         if self.pot_type=='default':
             for i in range(2,self.npts-1):
                 if self.pot[self.npts-i]>self.pot[self.npts-i+1] and self.pot[self.npts-i]>self.pot[self.npts-i-1]:
-                    mp=i
+                    mp=self.npts-i
         else:
             mp=np.argmax(self.pot)
             
