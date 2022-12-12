@@ -438,7 +438,7 @@ class Numerov_Cooley():
         for i in range(mp,self.npts):
             if self.pot[i]<Vb:
                 counter+=1
-        self.wf_ax.plot(self.x[mp+counter:],[Vb for i in range(counter+1)],lw=2,color='blue',label='$E_F$')
+        self.wf_ax.plot(self.x[-counter-1:],[Vb for i in range(counter+1)],lw=2,color='blue',label='$E_F$')
         
         self.wf_fig.canvas.draw()
     
