@@ -172,7 +172,7 @@ def particle_in_a_box(n,L):
 
 class Numerov_Cooley():
     #x is in nm, pot is in J
-    def __init__(self,x,pot,tol=0.0000001,pot_type='default',filter_mode='nodes',suppress_output=True,max_steps=100,wf_height=1,overlay_stitch_point=False):
+    def __init__(self,x,pot,tol=0.0000001,pot_type='default',filter_mode='nodes',suppress_output=True,max_steps=100,wf_height=1,overlay_stitch_point=False,localization_cutoff=1):
         h=6.626e-34/np.pi/2 #J*s
         m=9.11e-31 #kg
         self.k=2*m/h**2*1e-18 #1/nm**2/J
@@ -198,6 +198,7 @@ class Numerov_Cooley():
         self.wf_height=wf_height
         self.stitch_points=[]
         self.overlay_stitch_point=overlay_stitch_point
+        self.localization_cutoff=localization_cutoff
         
     #E is the trial energy in eV
     def main(self,E):
@@ -309,7 +310,7 @@ class Numerov_Cooley():
         elif self.filter_mode=='localized':
             peaks=[]
             peak_heights=[]
-            for i in range(1,np.argmin(abs(self.x))-1):
+            for i in range(1,self.npts-1):
                 if abs(R[i])>abs(R[i-1]) and abs(R[i])>abs(R[i+1]):
                     peaks.append(self.x[i])
                     peak_heights.append(abs(R[i]))
@@ -319,7 +320,8 @@ class Numerov_Cooley():
                     return a*x+b
                 
                 params=scipy.optimize.curve_fit(line_fit,[i for i in range(len(peak_heights))],peak_heights)
-                if params[0][0]>0 and xavg>np.min(self.x)/2+abs(np.min(self.x)/10):
+                #if params[0][0]>0 and xavg>np.min(self.x)/2+abs(np.min(self.x)/20):
+                if params[0][0]>0 and self.x[np.argmax(R)]>-self.localization_cutoff:
                     self.nodes.append(nodes)
                     self.nstates+=1
                     self.E.append(E)
@@ -430,7 +432,7 @@ class Numerov_Cooley():
             
         maxima=[]
         for i in range(mpmin,mpmax):
-            if R[i+1]-R[i]<0.0 and R[i-1]-R[i]<0.0:
+            if abs(R)[i+1]-abs(R)[i]<0.0 and abs(R)[i-1]-abs(R)[i]<0.0:
                 maxima.append(i)
                 
         return maxima
