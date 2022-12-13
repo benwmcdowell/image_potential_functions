@@ -172,7 +172,7 @@ def particle_in_a_box(n,L):
 
 class Numerov_Cooley():
     #x is in nm, pot is in J
-    def __init__(self,x,pot,tol=0.0000001,pot_type='default',filter_mode='nodes',suppress_output=True,max_steps=100,wf_height=1):
+    def __init__(self,x,pot,tol=0.0000001,pot_type='default',filter_mode='nodes',suppress_output=True,max_steps=100,wf_height=1,overlay_stitch_point=False):
         h=6.626e-34/np.pi/2 #J*s
         m=9.11e-31 #kg
         self.k=2*m/h**2*1e-18 #1/nm**2/J
@@ -196,6 +196,8 @@ class Numerov_Cooley():
         self.max_dE=1.0
         self.max_steps=max_steps
         self.wf_height=wf_height
+        self.stitch_points=[]
+        self.overlay_stitch_point=overlay_stitch_point
         
     #E is the trial energy in eV
     def main(self,E):
@@ -243,7 +245,7 @@ class Numerov_Cooley():
                 break
             trial_energies.append(E)
             steps.append(counter)
-            dE,R=self.integrator(E)
+            dE,R,mp=self.integrator(E)
             if dE>self.max_dE:
                 dE=self.max_dE
             E+=dE
@@ -263,6 +265,7 @@ class Numerov_Cooley():
                 self.E.append(E)
                 self.wf.append(R)
                 self.xavg.append(xavg)
+                self.stitch_points.append(mp)
             if nodes in self.nodes:
                 i=self.nodes.index(nodes)
                 if abs(xavg)<abs(self.xavg[i]):
@@ -270,6 +273,7 @@ class Numerov_Cooley():
                     self.E[i]=E
                     self.wf[i]=R
                     self.xavg[i]=xavg
+                    self.stitch_points.append(mp)
                     
         elif self.filter_mode=='energy':
             if len(self.E)>0:
@@ -292,6 +296,7 @@ class Numerov_Cooley():
                 self.E.append(E)
                 self.wf.append(R)
                 self.xavg.append(xavg)
+                self.stitch_points.append(mp)
             else:
                 i=np.argmin(abs(np.array(self.E)-E))
                 if abs(xavg)<abs(self.xavg[i]):
@@ -299,6 +304,7 @@ class Numerov_Cooley():
                     self.E[i]=E
                     self.wf[i]=R
                     self.xavg[i]=xavg
+                    self.stitch_points.append(mp)
                     
         elif self.filter_mode=='localized':
             peaks=[]
@@ -320,13 +326,15 @@ class Numerov_Cooley():
                     self.wf.append(R)
                     self.xavg.append(xavg)
                     self.peak_slope.append(params[0][0])
+                    self.stitch_points.append(mp)
             else:
                 self.nodes.append(nodes)
                 self.nstates+=1
                 self.E.append(E)
                 self.wf.append(R)
                 self.xavg.append(xavg)
-                self.peak_slope.append(params[0][0])
+                self.peak_slope.append(0)
+                self.stitch_points.append(mp)
                     
         elif self.filter_mode=='none':
             self.nodes.append(nodes)
@@ -334,6 +342,7 @@ class Numerov_Cooley():
             self.E.append(E)
             self.wf.append(R)
             self.xavg.append(xavg)
+            self.stitch_points.append(mp)
 
     def integrator(self,E):
         Yin=np.zeros(self.npts)
@@ -342,18 +351,24 @@ class Numerov_Cooley():
         Rout=np.zeros(self.npts)
         U=self.pot-E
         counter=2
-        for i in self.pot[::-1][:-2]:
-            if i>E:
+        #sets right-hand integration limit to the rightmost potential maxima
+        #for i in range(3,self.npts):
+        #    counter+=1
+        #    if self.pot[self.npts-i]>self.pot[self.npts-i-1]:
+        for i in U[::-1][2:]:
+            counter+=1
+            if i>0:
                 xlim=self.npts-counter
                 break
-            counter+=1
         else:
             xlim=self.npts-2
+            
         small_val=0.0000005
         Rout[1]=small_val
-        Rin[-2]=small_val
         Yout[1]=small_val*(1-self.dx**2/12*U[1])
-        Yin[-2]=small_val*(1-self.dx**2/12*U[-2])
+        Rin[xlim]=small_val
+        Yin[xlim]=small_val*(1-self.dx**2/12*U[-2])
+            
         for i in range(2,xlim):
             tempvar=self.dx**2*U[i-1]*Rout[i-1]+2*Yout[i-1]-Yout[i-2]
             if np.isnan(tempvar):
@@ -363,7 +378,7 @@ class Numerov_Cooley():
             Yout[i]=tempvar
             Rout[i]=Yout[i]/(1-self.dx**2/12*U[i])
             
-            i=self.npts-i-1
+            i=xlim+2-i-1
             
             tempvar=self.dx**2*U[i+1]*Rin[i+1]+2*Yin[i+1]-Yin[i+2]
             if np.isnan(tempvar):
@@ -382,6 +397,8 @@ class Numerov_Cooley():
             self.pot_type='default'
         Rin/=Rin[mp]
         Rout/=Rout[mp]
+        self.Rin=Rin
+        self.Rout=Rout
         R=np.zeros(self.npts)
         R[:mp]+=Rout[:mp]
         R[mp+1:]+=Rin[mp+1:]
@@ -391,7 +408,7 @@ class Numerov_Cooley():
         Ym=R[mp]*(1-self.dx**2/12*U[mp])
         dE=((-Yout+2*Ym-Yin)/self.dx**2+U[mp])/(sum(R**2))
         
-        return dE,R
+        return dE,R,self.x[mp]
     
     def normalize_wf(self,R):
         R/=np.linalg.norm(R)
@@ -405,13 +422,15 @@ class Numerov_Cooley():
     
     def find_maxima(self,R):
         if self.pot_type=='default':
-            mpmin=np.argmin(abs(self.x-1))
+            mpmax=np.argmax(self.pot)
         else:
-            mpmin=0
+            mpmax=self.npts
+            
+        mpmin=1
             
         maxima=[]
-        for i in range(mpmin,self.npts-1-mpmin):
-            if R[i+1]-R[i]<0.0:
+        for i in range(mpmin,mpmax):
+            if R[i+1]-R[i]<0.0 and R[i-1]-R[i]<0.0:
                 maxima.append(i)
                 
         return maxima
@@ -459,5 +478,7 @@ class Numerov_Cooley():
             self.wf_ax.plot([self.x[0],self.x[-1]],[self.E[i] for j in range(2)],color='black',lw=2,linestyle='dashed')
             self.wf_ax.plot(self.x,self.wf[i]/np.max(self.wf[i])*self.wf_height+self.E[i],color='black',lw=2)
             self.wf_ax.scatter(self.xavg[i],self.E[i],color='black',s=100)
+            if self.overlay_stitch_point:
+                self.wf_ax.scatter(self.stitch_points[i],self.E[i],color='green',s=100)
         self.wf_ax.legend()
         self.wf_fig.canvas.draw()
