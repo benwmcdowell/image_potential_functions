@@ -462,6 +462,8 @@ class Numerov_Cooley():
         self.wf_ax.plot(self.x[-counter-1:],[Vb for i in range(counter+1)],lw=2,color='blue',label='$E_F$')
         
         self.wf_fig.canvas.draw()
+        
+        print('closest eigenenergy to {} eV bias voltage is: {} eV with {} % error'.format(Vb,self.energies[np.argmin(abs(self.energies-Vb))],(self.energies[np.argmin(abs(self.energies-Vb))]-Vb)/Vb*100))
     
     def cleanup_output(self):
         self.pot_shift*=6.242e18/self.k
@@ -470,7 +472,7 @@ class Numerov_Cooley():
             self.E[i]+=self.pot_shift
         self.pot*=6.242e18/self.k
         self.pot+=self.pot_shift
-    
+        
     def plot_output(self):
         if not hasattr(self,'wf_fig'):
             self.wf_fig,self.wf_ax=plt.subplots(1,1)
