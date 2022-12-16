@@ -172,7 +172,7 @@ def particle_in_a_box(n,L):
 
 class Numerov_Cooley():
     #x is in nm, pot is in J
-    def __init__(self,x,pot,tol=0.0000001,pot_type='default',filter_mode='nodes',suppress_output=True,max_steps=100,wf_height=1,overlay_stitch_point=False,localization_cutoff=1):
+    def __init__(self,x,pot,tol=0.0000001,pot_type='default',filter_mode='nodes',suppress_output=True,max_steps=100,wf_height=1,overlay_stitch_point=False,localization_cutoff=1,suppress_timing_output=False):
         h=6.626e-34/np.pi/2 #J*s
         m=9.11e-31 #kg
         self.k=2*m/h**2*1e-18 #1/nm**2/J
@@ -199,6 +199,7 @@ class Numerov_Cooley():
         self.stitch_points=[]
         self.overlay_stitch_point=overlay_stitch_point
         self.localization_cutoff=localization_cutoff
+        self.suppress_timing_output=suppress_timing_output
         
     #E is the trial energy in eV
     def main(self,E):
@@ -216,7 +217,7 @@ class Numerov_Cooley():
             self.main(i)
             counter+=1
             
-            if counter in percentage_counter:
+            if counter in percentage_counter and not self.suppress_timing_output:
                 print('{}% finished with range of trial eigenvalues. {} s elapsed so far'.format(round(counter/(nsteps-1)*100),time.time()-start))
         
     def node_counter(self,R):
@@ -488,14 +489,14 @@ class Numerov_Cooley():
         self.wf_fig.canvas.draw()
 
 class optimize_parameters():
-    def __init__(self,peak_energies,peak_heights,dielectric=False,npts=5000,zmin=0.2402093333333333*5,w=0.2402093333333333,Vg=4.2,V0=4.633858138635734,z0=0,phis=4.59,phit=4.59,zm=0.015,t=0.249595,e1=5.688,Vcbm=3.78):
+    def __init__(self,peak_energies,peak_heights,dielectric=False,loop_pts=100,npts=5000,zmin=0.2402093333333333*5,w=0.2402093333333333,Vg=4.2,V0=4.633858138635734,z0=0,phis=4.59,phit=4.59,zm=0.015,t=0.249595,e1=5.688,Vcbm=3.78):
     
         self.nstates=np.array([i for i in range(len(peak_energies))])
         self.peak_energies=peak_energies
         self.peak_heights=peak_heights
         
         self.dielectric=dielectric
-        self.loop_pts=100
+        self.loop_pts=loop_pts
         
         self.npts=npts
         self.zmin=zmin
