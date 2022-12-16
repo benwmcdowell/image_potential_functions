@@ -511,22 +511,29 @@ class optimize_parameters():
         self.e1=e1
         self.Vcbm=Vcbm
         
+        self.opt_steps=0
+        self.start=time.time()
+        
         if not dielectric:
             popt,pcov=scipy.optimize.curve_fit(self.model_no_dielectric,self.nstates,self.peak_energies,p0=(self.z0,self.phit),bounds=((np.min(peak_heights)+0.2,1),(np.inf,np.inf)))
             print('optimized parameters:\ninitial tip-sample distance = {} nm\ntip work function = {} eV'.format(popt[0],popt[1]))
+            
+            print('total # of optimization steps: {}'.format(self.opt_steps))
+            print('total # of eigenvalue calculations: {}'.format(self.opt_steps*self.loop_pts))
+            print('average time per eigenvalue calculation: {} s'.format((time.time()-self.start)/(self.opt_steps*self.loop_pts)))
 
     #function for fitting parameters in potential with no dielectric
     #the free parameters are the initial tip-sample distance and the tip work function
     def model_no_dielectric(self,nstates,z0,phit_opt):
-        
         energy_min=0
         energy_tol=0.0001
+        self.opt_steps+=1
         
         calc_energies=np.zeros(len(nstates))
         for i in range(len(nstates)):
             d_opt=z0+self.peak_heights[i]
             x,pot=build_potential_no_dielectric(self.npts,self.zmin,self.w,self.Vg,self.V0,d_opt,self.phis,phit_opt,self.peak_energies[i],self.zm)
-            tempvar=Numerov_Cooley(x,pot,filter_mode='none')
+            tempvar=Numerov_Cooley(x,pot,filter_mode='none',suppress_timing_output=True)
             tempvar.loop_main(0,self.peak_energies[i]+.5,self.loop_pts)
             tempvar.cleanup_output()
             
