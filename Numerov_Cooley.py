@@ -463,7 +463,7 @@ class Numerov_Cooley():
         
         self.wf_fig.canvas.draw()
         
-        print('closest eigenenergy to {} eV bias voltage is: {} eV with {} % error'.format(Vb,self.energies[np.argmin(abs(self.energies-Vb))],(self.energies[np.argmin(abs(self.energies-Vb))]-Vb)/Vb*100))
+        print('closest eigenenergy to {} eV bias voltage is: {} eV with {} % error'.format(Vb,self.E[np.argmin(abs(np.array(self.E)-Vb))],(self.E[np.argmin(abs(np.array(self.E)-Vb))]-Vb)/Vb*100))
     
     def cleanup_output(self):
         self.pot_shift*=6.242e18/self.k
@@ -486,3 +486,73 @@ class Numerov_Cooley():
                 self.wf_ax.scatter(self.stitch_points[i],self.E[i],color='green',s=100)
         self.wf_ax.legend()
         self.wf_fig.canvas.draw()
+
+class optimize_parameters():
+    def __init__(self,peak_energies,peak_heights,dielectric=False,npts=5000,zmin=0.2402093333333333*5,w=0.2402093333333333,Vg=4.2,V0=4.633858138635734,z0=0,phis=4.59,phit=4.59,zm=0.015,t=0.249595,e1=5.688,Vcbm=3.78):
+    
+        self.nstates=np.array([i for i in range(len(peak_energies))])
+        self.peak_energies=peak_energies
+        self.peak_heights=peak_heights
+        
+        self.dielectric=dielectric
+        self.loop_pts=100
+        
+        self.npts=npts
+        self.zmin=zmin
+        self.w=w
+        self.Vg=Vg
+        self.V0=V0
+        self.z0=z0
+        self.phis=phis
+        self.phit=phit
+        self.zm=zm
+        self.t=t
+        self.e1=e1
+        self.Vcbm=Vcbm
+        
+        if not dielectric:
+            popt,pcov=scipy.optimize.curve_fit(self.model_no_dielectric,self.nstates,self.peak_energies,p0=(self.z0,self.phit),bounds=((np.min(peak_heights)+0.2,1),(np.inf,np.inf)))
+            print('optimized parameters:\ninitial tip-sample distance = {} nm\ntip work function = {} eV'.format(popt[0],popt[1]))
+
+    #function for fitting parameters in potential with no dielectric
+    #the free parameters are the initial tip-sample distance and the tip work function
+    def model_no_dielectric(self,nstates,z0,phit_opt):
+        
+        energy_min=0
+        energy_tol=0.0001
+        
+        calc_energies=np.zeros(len(nstates))
+        for i in range(len(nstates)):
+            d_opt=z0+self.peak_heights[i]
+            x,pot=build_potential_no_dielectric(self.npts,self.zmin,self.w,self.Vg,self.V0,d_opt,self.phis,phit_opt,self.peak_energies[i],self.zm)
+            tempvar=Numerov_Cooley(x,pot,filter_mode='none')
+            tempvar.loop_main(0,self.peak_energies[i]+.5,self.loop_pts)
+            tempvar.cleanup_output()
+            
+            temp_energies=[]
+            counter=[]
+            for j in tempvar.E:
+                if j>energy_min:
+                    if len(temp_energies)==0:
+                        temp_energies.append(j)
+                        counter.append(1)
+                    else:
+                        for k in range(len(temp_energies)):
+                            if abs(j-temp_energies[k])<energy_tol:
+                                #takes rolling average of energy value
+                                temp_energies[k]=(temp_energies[k]*counter[k]+j)/(counter[k]+1)
+                                counter[k]+=1
+                                break
+                        else:
+                            temp_energies.append(j)
+                            counter.append(1)
+                            
+            calc_energies[i]=temp_energies[i]
+        
+        return calc_energies
+    
+    
+                            
+                                
+                
+    
