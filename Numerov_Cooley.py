@@ -516,11 +516,16 @@ class optimize_parameters():
         
         if not dielectric:
             popt,pcov=scipy.optimize.curve_fit(self.model_no_dielectric,self.nstates,self.peak_energies,p0=(self.z0,self.phit),bounds=((np.min(peak_heights)+0.2,1),(np.inf,np.inf)))
-            print('optimized parameters:\ninitial tip-sample distance = {} nm\ntip work function = {} eV'.format(popt[0],popt[1]))
+            pcov=np.sqrt(np.diag(pcov))
+            print('optimized parameters:\ninitial tip-sample distance = {} +/- {} nm\ntip work function = {} +/- {} eV'.format(popt[0],pcov[0],popt[1],pcov[1]))
             
             print('total # of optimization steps: {}'.format(self.opt_steps))
             print('total # of eigenvalue calculations: {}'.format(self.opt_steps*self.loop_pts))
             print('average time per eigenvalue calculation: {} s'.format((time.time()-self.start)/(self.opt_steps*self.loop_pts)))
+            
+            print('calculated energies:')
+            for i in range(len(self.nstates)):
+                print('{} eV with error of {} %'.format(self.calc_energies[i],(self.calc_energies[i]-self.peak_energies[i])/self.peak_energies[i]*100))
 
     #function for fitting parameters in potential with no dielectric
     #the free parameters are the initial tip-sample distance and the tip work function
@@ -556,6 +561,8 @@ class optimize_parameters():
                             counter.append(1)
                             
             calc_energies[i]=temp_energies[i]
+            
+        self.calc_energies=calc_energies
         
         return calc_energies
     
