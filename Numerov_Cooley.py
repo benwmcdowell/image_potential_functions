@@ -514,12 +514,12 @@ class optimize_parameters():
         self.start=time.time()
         
         if not dielectric:
-            self.opt_fig,self.opt_ax=plt.subplots(3,1)
+            self.opt_fig,self.opt_ax=plt.subplots(3,1,tight_layout=True)
             self.errors=[[],[]]
             self.opt_params=[[],[]]
             self.opt_steps=[]
             self.opt_fig.show()
-            popt,pcov=scipy.optimize.curve_fit(self.model_no_dielectric,self.nstates,self.peak_energies,p0=(self.z0,self.phit),bounds=((-1*np.min(peak_heights)+0.2,1),(10,8)),method='trf')
+            popt,pcov=scipy.optimize.curve_fit(self.model_no_dielectric,self.nstates,self.peak_energies,sigma=(0.2,0.25),p0=(self.z0,self.phit),bounds=((-1*np.min(peak_heights)+0.2,1),(np.inf,np.inf)),method='trf')
             pcov=np.sqrt(np.diag(pcov))
             print('optimized parameters:\ninitial tip-sample distance = {} +/- {} nm\ntip work function = {} +/- {} eV'.format(popt[0],pcov[0],popt[1],pcov[1]))
             
@@ -567,6 +567,7 @@ class optimize_parameters():
             
         self.calc_energies=calc_energies
         
+        #plotting to monitor optimization progress
         self.opt_steps.append(len(self.opt_steps))
         self.opt_params[0].append(z0)
         self.opt_params[1].append(phit_opt)
@@ -580,6 +581,10 @@ class optimize_parameters():
             else:
                 for j in range(len(nstates)):
                     self.opt_ax[i].scatter(self.opt_steps,self.errors[j],s=80)
+                
+        for i,j in zip(range(2),['tip-sample distance / nm','tip work function / eV']):
+            self.opt_ax[i].set(ylabel=j)
+        self.opt_ax[2].set(xlabel='optimization steps',ylabel='eigenvalue error / %')
         self.opt_fig.canvas.draw()
         plt.pause(0.1)
         
