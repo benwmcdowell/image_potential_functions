@@ -489,7 +489,7 @@ class Numerov_Cooley():
         self.wf_fig.canvas.draw()
 
 class optimize_parameters():
-    def __init__(self,peak_energies,peak_heights,dielectric=False,loop_pts=100,npts=5000,zmin=0.2402093333333333*5,w=0.2402093333333333,Vg=4.2,V0=4.633858138635734,z0=0,phis=4.59,phit=4.59,zm=0.015,t=0.249595,e1=5.688,Vcbm=3.78):
+    def __init__(self,peak_energies,peak_heights,dielectric=False,loop_pts=100,map_pts=20,npts=5000,zmin=0.2402093333333333*5,w=0.2402093333333333,Vg=4.2,V0=4.633858138635734,z0=0,phis=4.59,phit=4.59,zm=0.015,t=0.249595,e1=5.688,Vcbm=3.78):
     
         self.nstates=np.array([i for i in range(len(peak_energies))])
         self.peak_energies=peak_energies
@@ -530,7 +530,7 @@ class optimize_parameters():
             print('calculated energies:')
             for i in range(len(self.nstates)):
                 print('{} eV with error of {} %'.format(self.calc_energies[i],(self.calc_energies[i]-self.peak_energies[i])/self.peak_energies[i]*100))
-
+                
     #function for fitting parameters in potential with no dielectric
     #the free parameters are the initial tip-sample distance and the tip work function
     def model_no_dielectric(self,nstates,z0,phit_opt):
@@ -591,7 +591,68 @@ class optimize_parameters():
         return calc_energies
     
     
-                            
-                                
-                
+class map_parameters():
+    def __init__(self,peak_energies,peak_heights,dielectric=False,loop_pts=100,map_pts=20,npts=5000,zmin=0.2402093333333333*5,w=0.2402093333333333,Vg=4.2,V0=4.633858138635734,z0=0,phis=4.59,phit=4.59,zm=0.015,t=0.249595,e1=5.688,Vcbm=3.78):
     
+        self.nstates=np.array([i for i in range(len(peak_energies))])
+        self.peak_energies=peak_energies
+        self.peak_heights=peak_heights
+        
+        self.dielectric=dielectric
+        self.map_pts
+        self.loop_pts=loop_pts
+        
+        self.npts=npts
+        self.zmin=zmin
+        self.w=w
+        self.Vg=Vg
+        self.V0=V0
+        self.z0=z0
+        self.phis=phis
+        self.phit=phit
+        self.zm=zm
+        self.t=t
+        self.e1=e1
+        self.Vcbm=Vcbm
+        
+    def map_no_dielectric(self,phit_range,z0_range):
+        
+        energy_min=0.0
+        energy_tol=0.0001
+        self.phit_pts=np.linspace(np.min(phit_range),np.max(phit_range),self.map_pts)
+        self.z0_pts=np.linspace(np.min(z0_range),np.max(z0_range),self.map_pts)
+        self.errors=np.zeros((len(self.nstates),self.map_pts,self.map_pts))
+        
+        self.map_fig,self.map_ax=plt.subplots(len(self.nstates)+1,1,tight_layout=True)
+        for i in range(self.map_pts):
+            for j in range(self.map_pts):
+                for k in range(len(self.nstates)):
+                    d_opt=self.z0_pts[i]+self.peak_heights[k]
+                    x,pot=build_potential_no_dielectric(self.npts,self.zmin,self.w,self.Vg,self.V0,d_opt,self.phis,self.phit_pts[j],self.peak_energies[i],self.zm)
+                    tempvar=Numerov_Cooley(x,pot,filter_mode='none',suppress_timing_output=True)
+                    tempvar.loop_main(0,self.peak_energies[k]+.5,self.loop_pts)
+                    tempvar.cleanup_output()
+                    
+                    temp_energies=[]
+                    counter=[]
+                    for l in tempvar.E:
+                        if l>energy_min:
+                            if len(temp_energies)==0:
+                                temp_energies.append(l)
+                                counter.append(1)
+                            else:
+                                for m in range(len(temp_energies)):
+                                    if abs(l-temp_energies[m])<energy_tol:
+                                        #takes rolling average of energy value
+                                        temp_energies[m]=(temp_energies[m]*counter[m]+l)/(counter[m]+1)
+                                        counter[m]+=1
+                                        break
+                                else:
+                                    temp_energies.append(l)
+                                    counter.append(1)
+                                    
+                    self.errors[k,i,j]=(temp_energies[k]-self.peak_energies[k])/self.peak_energies[k]*100
+        for i in range(len(self.nstates)):
+            self.map_ax.pcolormesh([],[],self.errors[i],shading='nearest')
+                    
+                    
