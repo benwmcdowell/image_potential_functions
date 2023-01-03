@@ -615,7 +615,7 @@ class map_parameters():
         self.e1=e1
         self.Vcbm=Vcbm
         
-    def map_no_dielectric(self,phit_range,z0_range):
+    def map_no_dielectric(self,phit_range,z0_range,cmap='jet'):
         
         energy_min=0.0
         energy_tol=0.0001
@@ -653,6 +653,8 @@ class map_parameters():
                                     
                     self.errors[k,i,j]=(temp_energies[k]-self.peak_energies[k])/self.peak_energies[k]*100
         for i in range(len(self.nstates)):
-            self.map_ax.pcolormesh([],[],self.errors[i],shading='nearest')
+            self.map_ax.pcolormesh([self.z0_pts for i in range(self.map_pts)],[self.phit_pts for j in range(self.map_pts)].T,self.errors[i],shading='nearest',cmap=cmap)
+            self.map_ax.set(xlabel='initial tip-sample distance / nm', ylabel='tip work function / V')
+            self.map_fig.show()
                     
                     
