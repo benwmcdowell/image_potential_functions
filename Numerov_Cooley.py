@@ -599,7 +599,7 @@ class map_parameters():
         self.peak_heights=peak_heights
         
         self.dielectric=dielectric
-        self.map_pts
+        self.map_pts=map_pts
         self.loop_pts=loop_pts
         
         self.npts=npts
@@ -628,7 +628,7 @@ class map_parameters():
             for j in range(self.map_pts):
                 for k in range(len(self.nstates)):
                     d_opt=self.z0_pts[i]+self.peak_heights[k]
-                    x,pot=build_potential_no_dielectric(self.npts,self.zmin,self.w,self.Vg,self.V0,d_opt,self.phis,self.phit_pts[j],self.peak_energies[i],self.zm)
+                    x,pot=build_potential_no_dielectric(self.npts,self.zmin,self.w,self.Vg,self.V0,d_opt,self.phis,self.phit_pts[j],self.peak_energies[k],self.zm)
                     tempvar=Numerov_Cooley(x,pot,filter_mode='none',suppress_timing_output=True)
                     tempvar.loop_main(0,self.peak_energies[k]+.5,self.loop_pts)
                     tempvar.cleanup_output()
@@ -653,8 +653,10 @@ class map_parameters():
                                     
                     self.errors[k,i,j]=(temp_energies[k]-self.peak_energies[k])/self.peak_energies[k]*100
         for i in range(len(self.nstates)):
-            self.map_ax.pcolormesh([self.z0_pts for i in range(self.map_pts)],[self.phit_pts for j in range(self.map_pts)].T,self.errors[i],shading='nearest',cmap=cmap)
-            self.map_ax.set(xlabel='initial tip-sample distance / nm', ylabel='tip work function / V')
-            self.map_fig.show()
+            self.map_ax[i].pcolormesh([self.z0_pts for j in range(self.map_pts)],np.array([self.phit_pts for k in range(self.map_pts)]).T,self.errors[i],shading='nearest',cmap=cmap)
+            self.map_ax[i].set(ylabel='tip work function / V')
+        self.map_ax[len(self.nstates)].pcolormesh([self.z0_pts for j in range(self.map_pts)],np.array([self.phit_pts for k in range(self.map_pts)]).T,sum(abs(self.errors[i]) for i in range(len(self.nstates))),shading='nearest',cmap=cmap)
+        self.map_ax[len(self.nstates)].set(xlabel='initial tip-sample distance / nm')
+        self.map_fig.show()
                     
                     
