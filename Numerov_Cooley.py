@@ -427,7 +427,7 @@ class Numerov_Cooley():
         if self.pot_type=='default':
             mpmax=np.argmax(self.pot)
         else:
-            mpmax=self.npts
+            mpmax=self.npts-1
             
         mpmin=1
             
@@ -519,7 +519,7 @@ class optimize_parameters():
             self.opt_params=[[],[]]
             self.opt_steps=[]
             self.opt_fig.show()
-            popt,pcov=scipy.optimize.curve_fit(self.model_no_dielectric,self.nstates,self.peak_energies,sigma=(0.2,0.25),p0=(self.z0,self.phit),bounds=((-1*np.min(peak_heights)+0.2,1),(np.inf,np.inf)),method='trf')
+            popt,pcov=scipy.optimize.curve_fit(self.model_no_dielectric,self.nstates,self.peak_energies,p0=(self.z0,self.phit),bounds=((-1*np.min(peak_heights)+0.2,1),(np.inf,np.inf)),method='trf')
             pcov=np.sqrt(np.diag(pcov))
             print('optimized parameters:\ninitial tip-sample distance = {} +/- {} nm\ntip work function = {} +/- {} eV'.format(popt[0],pcov[0],popt[1],pcov[1]))
             
