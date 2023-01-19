@@ -652,6 +652,7 @@ class map_parameters():
                                     counter.append(1)
                                     
                     self.errors[k,i,j]=(temp_energies[k]-self.peak_energies[k])/self.peak_energies[k]*100
+        self.errors=np.abs(self.errors)
         for i in range(len(self.nstates)):
             self.map_ax[i].pcolormesh([self.z0_pts for j in range(self.map_pts)],np.array([self.phit_pts for k in range(self.map_pts)]).T,self.errors[i],shading='nearest',cmap=cmap)
             self.map_ax[i].set(ylabel='tip work function / V')
