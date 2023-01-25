@@ -489,7 +489,7 @@ class Numerov_Cooley():
         self.wf_fig.canvas.draw()
 
 class optimize_parameters():
-    def __init__(self,peak_energies,peak_heights,dielectric=False,loop_pts=100,map_pts=20,npts=5000,zmin=0.2402093333333333*5,w=0.2402093333333333,Vg=4.2,V0=4.633858138635734,z0=0,phis=4.59,phit=4.59,zm=0.015,t=0.249595,e1=5.688,Vcbm=3.78):
+    def __init__(self,peak_energies,peak_heights,dielectric=False,loop_pts=100,map_pts=20,npts=5000,zmin=0.2402093333333333*5,w=0.2402093333333333,Vg=4.2,V0=4.633858138635734,z0=0,phis=4.59,phit=4.59,zm=0.015,t=0.249595,e1=5.688,vcbm=3.78):
     
         self.nstates=np.array([i for i in range(len(peak_energies))])
         self.peak_energies=peak_energies
@@ -509,11 +509,11 @@ class optimize_parameters():
         self.zm=zm
         self.t=t
         self.e1=e1
-        self.Vcbm=Vcbm
+        self.vcbm=vcbm
         
         self.start=time.time()
         
-        if not dielectric:
+        if not self.dielectric:
             self.opt_fig,self.opt_ax=plt.subplots(3,1,tight_layout=True)
             self.errors=[[],[]]
             self.opt_params=[[],[]]
@@ -531,11 +531,33 @@ class optimize_parameters():
             for i in range(len(self.nstates)):
                 print('{} eV with error of {} %'.format(self.calc_energies[i],(self.calc_energies[i]-self.peak_energies[i])/self.peak_energies[i]*100))
                 
+        elif self.dielectric:
+            self.opt_fig,self.opt_ax=plt.subplots(4,1,tight_layout=True)
+            self.errors=[[] for i in range(len(self.nstates))]
+            self.opt_params=[[],[],[]]
+            self.opt_steps=[]
+            self.opt_fig.show()
+            p0=(self.phis,self.vcbm,self.e1)
+            bounds=((0,0,0),(np.inf,np.inf,np.inf))
+            popt,pcov=scipy.optimize.curve_fit(self.model_with_dielectric,self.nstates,self.peak_energies,p0=p0,bounds=bounds,method='trf')
+            pcov=np.sqrt(np.diag(pcov))
+            print('optimized parameters:\nsample work function = {} +/- {} eV\nconduction band minimum of dielectric= {} +/- {} eV\ndielectric permittivity = {} +/- {}'.format(popt[0],pcov[0],popt[1],pcov[1],popt[2],pcov[2]))
+            
+            print('total # of optimization steps: {}'.format(len(self.opt_steps)))
+            print('total # of eigenvalue calculations: {}'.format(len(self.opt_steps*self.loop_pts)))
+            print('average time per eigenvalue calculation: {} s'.format((time.time()-self.start)/(len(self.opt_steps)*self.loop_pts)))
+            
+            print('calculated energies:')
+            for i in range(len(self.nstates)):
+                print('{} eV with error of {} %'.format(self.calc_energies[i],(self.calc_energies[i]-self.peak_energies[i])/self.peak_energies[i]*100))
+    
     #function for fitting parameters in potential with no dielectric
     #the free parameters are the initial tip-sample distance and the tip work function
     def model_no_dielectric(self,nstates,z0,phit_opt):
         energy_min=0
         energy_tol=0.0001
+        print(nstates)
+        print(self.peak_energies)
         
         calc_energies=np.zeros(len(nstates))
         for i in range(len(nstates)):
@@ -590,6 +612,68 @@ class optimize_parameters():
         
         return calc_energies
     
+    #function for fitting parameters in potential with no dielectric
+    #the free parameters are the initial tip-sample distance and the tip work function
+    def model_with_dielectric(self,nstates,phis_opt,vcbm_opt,e1_opt):
+        energy_min=0
+        energy_tol=0.0001
+        
+        calc_energies=np.zeros(len(nstates))
+        for i in range(len(nstates)):
+            d_opt=self.z0+self.peak_heights[i]
+            x,pot=build_potential_with_dielectric(self.npts,self.zmin,self.w,self.Vg,self.V0,d_opt,phis_opt,self.phit,self.peak_energies[i],self.zm,self.t,vcbm_opt,e1_opt)
+            tempvar=Numerov_Cooley(x,pot,filter_mode='none',suppress_timing_output=True)
+            tempvar.loop_main(0,self.peak_energies[i]+.5,self.loop_pts)
+            tempvar.cleanup_output()
+            
+            temp_energies=[]
+            counter=[]
+            for j in tempvar.E:
+                if j>energy_min:
+                    if len(temp_energies)==0:
+                        temp_energies.append(j)
+                        counter.append(1)
+                    else:
+                        for k in range(len(temp_energies)):
+                            if abs(j-temp_energies[k])<energy_tol:
+                                #takes rolling average of energy value
+                                temp_energies[k]=(temp_energies[k]*counter[k]+j)/(counter[k]+1)
+                                counter[k]+=1
+                                break
+                        else:
+                            temp_energies.append(j)
+                            counter.append(1)
+                            
+            if len(temp_energies)>=len(calc_energies):
+                calc_energies[i]=temp_energies[i]
+            else:
+                calc_energies[i]=np.max(temp_energies)*10
+            
+        self.calc_energies=calc_energies
+        
+        #plotting to monitor optimization progress
+        self.opt_steps.append(len(self.opt_steps))
+        self.opt_params[0].append(phis_opt)
+        self.opt_params[1].append(vcbm_opt)
+        self.opt_params[2].append(e1_opt)
+        for i in range(len(nstates)):
+            self.errors[i].append((self.calc_energies[i]-self.peak_energies[i])/self.peak_energies[i]*100)
+            
+        for i in range(4):
+            self.opt_ax[i].clear()
+            if i<3:
+                self.opt_ax[i].scatter(self.opt_steps,self.opt_params[i],s=80)
+            else:
+                for j in range(len(nstates)):
+                    self.opt_ax[i].scatter(self.opt_steps,self.errors[j],s=80)
+                
+        for i,j in zip(range(3),['sample work function / eV', 'conduction band minimum of dielectric / eV', 'dielectric constant']):
+            self.opt_ax[i].set(ylabel=j)
+        self.opt_ax[3].set(xlabel='optimization steps',ylabel='eigenvalue error / %')
+        self.opt_fig.canvas.draw()
+        plt.pause(0.1)
+        
+        return calc_energies
     
 class map_parameters():
     def __init__(self,peak_energies,peak_heights,dielectric=False,loop_pts=100,map_pts=20,npts=5000,zmin=0.2402093333333333*5,w=0.2402093333333333,Vg=4.2,V0=4.633858138635734,z0=0,phis=4.59,phit=4.59,zm=0.015,t=0.249595,e1=5.688,Vcbm=3.78):
