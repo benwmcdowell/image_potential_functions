@@ -644,10 +644,11 @@ class optimize_parameters():
                             temp_energies.append(j)
                             counter.append(1)
                             
-            if i>=len(temp_energies):
-                calc_energies[i]=np.max(temp_energies)*10
-            else:
-                calc_energies[i]=temp_energies[i]
+            #if i>=len(temp_energies):
+            #    calc_energies[i]=np.max(temp_energies)*10
+            #else:
+            #    calc_energies[i]=temp_energies[i]
+            calc_energies[i]=temp_energies[np.argmin(abs(temp_energies-self.peak_energies[i]))]
             
         self.calc_energies=calc_energies
         
