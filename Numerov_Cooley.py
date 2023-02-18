@@ -621,7 +621,7 @@ class optimize_parameters():
         calc_energies=np.zeros(len(nstates))
         for i in range(len(nstates)):
             d_opt=self.z0+self.peak_heights[i]
-            x,pot=build_potential_with_dielectric(self.npts,self.zmin,self.w,self.Vg,self.V0,d_opt,phis_opt,self.phit,self.peak_energies[i],self.zm,self.t,vcbm_opt,e1_opt)
+            x,pot=build_potential_with_dielectric(self.npts,self.zmin,self.w,self.Vg,self.V0,d_opt,phis_opt,self.phit,self.peak_energies[i],self.zm,self.t,e1_opt,vcbm_opt)
             tempvar=Numerov_Cooley(x,pot,filter_mode='none',suppress_timing_output=True)
             tempvar.loop_main(0,self.peak_energies[i]+.5,self.loop_pts)
             tempvar.cleanup_output()
@@ -648,7 +648,7 @@ class optimize_parameters():
             #    calc_energies[i]=np.max(temp_energies)*10
             #else:
             #    calc_energies[i]=temp_energies[i]
-            calc_energies[i]=temp_energies[np.argmin(abs(temp_energies-self.peak_energies[i]))]
+            calc_energies[i]=temp_energies[np.argmin(abs(np.array(temp_energies)-self.peak_energies[i]))]
             
         self.calc_energies=calc_energies
         
