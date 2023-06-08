@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import warnings
 import time
 import scipy
+from pathos.multiprocessing import ProcessPool
 
 #d is the tip-sample distance in nm
 #V is the voltage bias in eV
@@ -203,24 +204,40 @@ class Numerov_Cooley():
         
     #E is the trial energy in eV
     def main(self,E):
+        if self.nprocs>1:
+            import numpy as np
         E*=self.k/6.242e18
         E-=self.pot_shift
         self.optimize_energy(E)
+        if self.nprocs>1:
+            return E
         
     #loops main function with trial eigenvalues ranging from initial to final in nsteps steps
-    def loop_main(self,initial,final,nsteps):
+    def loop_main(self,initial,final,nsteps,nprocs=1):
         counter=0
         start=time.time()
         percentage_counter=np.array([25,50,75,100])
-        percentage_counter=np.round(percentage_counter/100*(nsteps-1))
-        for i in np.linspace(initial,final,nsteps):
-            self.main(i)
-            counter+=1
+        self.nprocs=nprocs
+        
+        if self.nprocs>1:
+            pool=ProcessPool(self.nprocs)
+            output=pool.map(self.main,np.linspace(initial,final,nsteps))
+            for j in output:
+                self.E.append(j[0])
+            pool.close()
             
-            if counter in percentage_counter and not self.suppress_timing_output:
-                print('{}% finished with range of trial eigenvalues. {} s elapsed so far'.format(round(counter/(nsteps-1)*100),time.time()-start))
+        else:
+            percentage_counter=np.round(percentage_counter/100*(nsteps-1))
+            for i in np.linspace(initial,final,nsteps):
+                self.main(i)
+                counter+=1
+                
+                if counter in percentage_counter and not self.suppress_timing_output:
+                    print('{}% finished with range of trial eigenvalues. {} s elapsed so far'.format(round(counter/(nsteps-1)*100),time.time()-start))
         
     def node_counter(self,R):
+        if self.nprocs>1:
+            import numpy as np
         counter=0
         if self.pot_type=='default':
             search_range=range(np.argmin(abs(self.x)),np.argmax(self.pot))
@@ -233,6 +250,8 @@ class Numerov_Cooley():
         return counter
         
     def optimize_energy(self,E):
+        if self.nprocs>1:
+            import numpy as np
         dE=self.tol+1
         counter=0
         if not hasattr(self,'opt_fig') and not self.suppress_output:
@@ -348,6 +367,8 @@ class Numerov_Cooley():
             self.stitch_points.append(mp)
 
     def integrator(self,E):
+        if self.nprocs>1:
+            import numpy as np
         Yin=np.zeros(self.npts)
         Rin=np.zeros(self.npts)
         Yout=np.zeros(self.npts)
@@ -414,16 +435,22 @@ class Numerov_Cooley():
         return dE,R,self.x[mp]
     
     def normalize_wf(self,R):
+        if self.nprocs>1:
+            import numpy as np
         R/=np.linalg.norm(R)
         
         return R
     
     def avg_pos(self,R):
+        if self.nprocs>1:
+            import numpy as np
         xavg=sum(self.x*(R/np.linalg.norm(R))**2)
         
         return xavg
     
     def find_maxima(self,R):
+        if self.nprocs>1:
+            import numpy as np
         if self.pot_type=='default':
             mpmax=np.argmax(self.pot)
         else:
@@ -439,6 +466,8 @@ class Numerov_Cooley():
         return maxima
                 
     def overlay_Fermi_levels(self,Vb):
+        if self.nprocs>1:
+            import numpy as np
         if not hasattr(self,'wf_fig'):
             self.wf_fig,self.wf_ax=plt.subplots(1,1)
             self.wf_ax.set(xlabel='position / nm', ylabel='energy / eV')
@@ -489,7 +518,7 @@ class Numerov_Cooley():
         self.wf_fig.canvas.draw()
 
 class optimize_parameters():
-    def __init__(self,peak_energies,peak_heights,sigma=None,dielectric=False,loop_pts=100,map_pts=20,npts=5000,zmin=0.2402093333333333*5,w=0.2402093333333333,Vg=4.2,V0=4.633858138635734,z0=0,phis=4.59,phit=4.59,zm=0.015,t=0.249595,e1=5.688,vcbm=3.78):
+    def __init__(self,peak_energies,peak_heights,sigma=None,dielectric=False,loop_pts=100,map_pts=20,npts=5000,nprocs=1,zmin=0.2402093333333333*5,w=0.2402093333333333,Vg=4.2,V0=4.633858138635734,z0=0,phis=4.59,phit=4.59,zm=0.015,t=0.249595,e1=5.688,vcbm=3.78):
     
         self.nstates=np.array([i for i in range(len(peak_energies))])
         self.peak_energies=peak_energies
@@ -497,6 +526,7 @@ class optimize_parameters():
         
         self.dielectric=dielectric
         self.loop_pts=loop_pts
+        self.nprocs=nprocs
         
         self.npts=npts
         self.zmin=zmin
@@ -511,7 +541,7 @@ class optimize_parameters():
         self.e1=e1
         self.vcbm=vcbm
         if not sigma.all():
-            sigma=np.ones(len(energies))
+            sigma=np.ones(len(peak_energies))
         
         self.start=time.time()
         
@@ -558,15 +588,13 @@ class optimize_parameters():
     def model_no_dielectric(self,nstates,z0,phit_opt):
         energy_min=0
         energy_tol=0.0001
-        print(nstates)
-        print(self.peak_energies)
         
         calc_energies=np.zeros(len(nstates))
         for i in range(len(nstates)):
             d_opt=z0+self.peak_heights[i]
             x,pot=build_potential_no_dielectric(self.npts,self.zmin,self.w,self.Vg,self.V0,d_opt,self.phis,phit_opt,self.peak_energies[i],self.zm)
             tempvar=Numerov_Cooley(x,pot,filter_mode='none',suppress_timing_output=True)
-            tempvar.loop_main(0,self.peak_energies[i]+.5,self.loop_pts)
+            tempvar.loop_main(0,self.peak_energies[i]+.5,self.loop_pts,nprocs=self.nprocs)
             tempvar.cleanup_output()
             
             temp_energies=[]
