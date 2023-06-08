@@ -489,7 +489,7 @@ class Numerov_Cooley():
         self.wf_fig.canvas.draw()
 
 class optimize_parameters():
-    def __init__(self,peak_energies,peak_heights,dielectric=False,loop_pts=100,map_pts=20,npts=5000,zmin=0.2402093333333333*5,w=0.2402093333333333,Vg=4.2,V0=4.633858138635734,z0=0,phis=4.59,phit=4.59,zm=0.015,t=0.249595,e1=5.688,vcbm=3.78):
+    def __init__(self,peak_energies,peak_heights,sigma=None,dielectric=False,loop_pts=100,map_pts=20,npts=5000,zmin=0.2402093333333333*5,w=0.2402093333333333,Vg=4.2,V0=4.633858138635734,z0=0,phis=4.59,phit=4.59,zm=0.015,t=0.249595,e1=5.688,vcbm=3.78):
     
         self.nstates=np.array([i for i in range(len(peak_energies))])
         self.peak_energies=peak_energies
@@ -510,6 +510,8 @@ class optimize_parameters():
         self.t=t
         self.e1=e1
         self.vcbm=vcbm
+        if not sigma.all():
+            sigma=np.ones(len(energies))
         
         self.start=time.time()
         
@@ -519,7 +521,7 @@ class optimize_parameters():
             self.opt_params=[[],[]]
             self.opt_steps=[]
             self.opt_fig.show()
-            popt,pcov=scipy.optimize.curve_fit(self.model_no_dielectric,self.nstates,self.peak_energies,p0=(self.z0,self.phit),bounds=((-1*np.min(peak_heights)+0.2,1),(np.inf,np.inf)),method='trf')
+            popt,pcov=scipy.optimize.curve_fit(self.model_no_dielectric,self.nstates,self.peak_energies,p0=(self.z0,self.phit),bounds=((-1*np.min(peak_heights)-0.2,1),(np.inf,np.inf)),method='trf',sigma=sigma)
             pcov=np.sqrt(np.diag(pcov))
             print('optimized parameters:\ninitial tip-sample distance = {} +/- {} nm\ntip work function = {} +/- {} eV'.format(popt[0],pcov[0],popt[1],pcov[1]))
             
