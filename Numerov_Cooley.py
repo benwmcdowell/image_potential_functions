@@ -221,9 +221,7 @@ class Numerov_Cooley():
         
         if self.nprocs>1:
             pool=ProcessPool(self.nprocs)
-            output=pool.map(self.main,np.linspace(initial,final,nsteps))
-            for j in output:
-                self.E.append(j[0])
+            self.E=pool.map(self.main,np.linspace(initial,final,nsteps))
             pool.close()
             
         else:
