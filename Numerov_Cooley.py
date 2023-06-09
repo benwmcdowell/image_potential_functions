@@ -809,6 +809,7 @@ if __name__=='__main__':
     with open('./params') as fp:
         lines=fp.readlines()
         for i in lines:
+            i=i.split('=')
             if i[0]=='w':
                 w=float(i[1])
             if i[0]=='zmin':
