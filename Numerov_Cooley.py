@@ -4,6 +4,9 @@ import warnings
 import time
 import scipy
 from pathos.multiprocessing import ProcessPool
+import sys
+import os
+import getopt
 
 #d is the tip-sample distance in nm
 #V is the voltage bias in eV
@@ -516,7 +519,7 @@ class Numerov_Cooley():
         self.wf_fig.canvas.draw()
 
 class optimize_parameters():
-    def __init__(self,peak_energies,peak_heights,sigma=None,dielectric=False,loop_pts=100,map_pts=20,npts=5000,nprocs=1,zmin=0.2402093333333333*5,w=0.2402093333333333,Vg=4.2,V0=4.633858138635734,z0=0,phis=4.59,phit=4.59,zm=0.015,t=0.249595,e1=5.688,vcbm=3.78):
+    def __init__(self,peak_energies,peak_heights,sigma=None,dielectric=False,loop_pts=100,npts=5000,suppress_plotting=False,nprocs=1,zmin=0.2402093333333333*5,w=0.2402093333333333,Vg=4.2,V0=4.633858138635734,z0=0,phis=4.59,phit=4.59,zm=0.015,t=0.249595,e1=5.688,vcbm=3.78):
     
         self.nstates=np.array([i for i in range(len(peak_energies))])
         self.peak_energies=peak_energies
@@ -540,15 +543,18 @@ class optimize_parameters():
         self.vcbm=vcbm
         if not sigma.all():
             sigma=np.ones(len(peak_energies))
-        
+            
+        self.suppress_plotting=suppress_plotting
         self.start=time.time()
         
         if not self.dielectric:
-            self.opt_fig,self.opt_ax=plt.subplots(3,1,tight_layout=True)
+            if not self.suppress_plotting:            
+                self.opt_fig,self.opt_ax=plt.subplots(3,1,tight_layout=True)
             self.errors=[[],[]]
             self.opt_params=[[],[]]
             self.opt_steps=[]
-            self.opt_fig.show()
+            if not self.suppress_plotting:            
+                self.opt_fig.show()
             popt,pcov=scipy.optimize.curve_fit(self.model_no_dielectric,self.nstates,self.peak_energies,p0=(self.z0,self.phit),bounds=((-1*np.min(peak_heights)-0.2,1),(np.inf,np.inf)),method='trf',sigma=sigma)
             pcov=np.sqrt(np.diag(pcov))
             print('optimized parameters:\ninitial tip-sample distance = {} +/- {} nm\ntip work function = {} +/- {} eV'.format(popt[0],pcov[0],popt[1],pcov[1]))
@@ -562,11 +568,13 @@ class optimize_parameters():
                 print('{} eV with error of {} %'.format(self.calc_energies[i],(self.calc_energies[i]-self.peak_energies[i])/self.peak_energies[i]*100))
                 
         elif self.dielectric:
-            self.opt_fig,self.opt_ax=plt.subplots(4,1,tight_layout=True)
+            if not self.suppress_plotting:            
+                self.opt_fig,self.opt_ax=plt.subplots(4,1,tight_layout=True)
             self.errors=[[] for i in range(len(self.nstates))]
             self.opt_params=[[],[],[]]
             self.opt_steps=[]
-            self.opt_fig.show()
+            if not self.suppress_plotting:            
+                self.opt_fig.show()
             p0=(self.phis,self.vcbm,self.e1)
             bounds=((0,0,0),(np.inf,np.inf,np.inf))
             popt,pcov=scipy.optimize.curve_fit(self.model_with_dielectric,self.nstates,self.peak_energies,p0=p0,bounds=bounds,method='trf')
@@ -624,19 +632,20 @@ class optimize_parameters():
         for i in range(2):
             self.errors[i].append((self.calc_energies[i]-self.peak_energies[i])/self.peak_energies[i]*100)
             
-        for i in range(3):
-            self.opt_ax[i].clear()
-            if i<2:
-                self.opt_ax[i].scatter(self.opt_steps,self.opt_params[i],s=80)
-            else:
-                for j in range(len(nstates)):
-                    self.opt_ax[i].scatter(self.opt_steps,self.errors[j],s=80)
-                
-        for i,j in zip(range(2),['tip-sample distance / nm','tip work function / eV']):
-            self.opt_ax[i].set(ylabel=j)
-        self.opt_ax[2].set(xlabel='optimization steps',ylabel='eigenvalue error / %')
-        self.opt_fig.canvas.draw()
-        plt.pause(0.1)
+        if not self.suppress_plotting:            
+            for i in range(3):
+                self.opt_ax[i].clear()
+                if i<2:
+                    self.opt_ax[i].scatter(self.opt_steps,self.opt_params[i],s=80)
+                else:
+                    for j in range(len(nstates)):
+                        self.opt_ax[i].scatter(self.opt_steps,self.errors[j],s=80)
+                    
+            for i,j in zip(range(2),['tip-sample distance / nm','tip work function / eV']):
+                self.opt_ax[i].set(ylabel=j)
+            self.opt_ax[2].set(xlabel='optimization steps',ylabel='eigenvalue error / %')
+            self.opt_fig.canvas.draw()
+            plt.pause(0.1)
         
         return calc_energies
     
@@ -687,20 +696,20 @@ class optimize_parameters():
         self.opt_params[2].append(e1_opt)
         for i in range(len(nstates)):
             self.errors[i].append((self.calc_energies[i]-self.peak_energies[i])/self.peak_energies[i]*100)
-            
-        for i in range(4):
-            self.opt_ax[i].clear()
-            if i<3:
-                self.opt_ax[i].scatter(self.opt_steps,self.opt_params[i],s=80)
-            else:
-                for j in range(len(nstates)):
-                    self.opt_ax[i].scatter(self.opt_steps,self.errors[j],s=80)
-                
-        for i,j in zip(range(3),['sample work function / eV', 'conduction band minimum of dielectric / eV', 'dielectric constant']):
-            self.opt_ax[i].set(ylabel=j)
-        self.opt_ax[3].set(xlabel='optimization steps',ylabel='eigenvalue error / %')
-        self.opt_fig.canvas.draw()
-        plt.pause(0.1)
+        if not self.suppress_plotting:            
+            for i in range(4):
+                self.opt_ax[i].clear()
+                if i<3:
+                    self.opt_ax[i].scatter(self.opt_steps,self.opt_params[i],s=80)
+                else:
+                    for j in range(len(nstates)):
+                        self.opt_ax[i].scatter(self.opt_steps,self.errors[j],s=80)
+                    
+            for i,j in zip(range(3),['sample work function / eV', 'conduction band minimum of dielectric / eV', 'dielectric constant']):
+                self.opt_ax[i].set(ylabel=j)
+            self.opt_ax[3].set(xlabel='optimization steps',ylabel='eigenvalue error / %')
+            self.opt_fig.canvas.draw()
+            plt.pause(0.1)
         
         return calc_energies
     
@@ -727,6 +736,7 @@ class map_parameters():
         self.t=t
         self.e1=e1
         self.Vcbm=Vcbm
+        self.suppress_plotting=False
         
     def map_no_dielectric(self,phit_range,z0_range,cmap='jet'):
         
@@ -736,7 +746,8 @@ class map_parameters():
         self.z0_pts=np.linspace(np.min(z0_range),np.max(z0_range),self.map_pts)
         self.errors=np.zeros((len(self.nstates),self.map_pts,self.map_pts))
         
-        self.map_fig,self.map_ax=plt.subplots(len(self.nstates)+1,1,tight_layout=True)
+        if not self.suppress_plotting:
+            self.map_fig,self.map_ax=plt.subplots(len(self.nstates)+1,1,tight_layout=True)
         for i in range(self.map_pts):
             for j in range(self.map_pts):
                 for k in range(len(self.nstates)):
@@ -766,11 +777,79 @@ class map_parameters():
                                     
                     self.errors[k,i,j]=(temp_energies[k]-self.peak_energies[k])/self.peak_energies[k]*100
         self.errors=np.abs(self.errors)
-        for i in range(len(self.nstates)):
-            self.map_ax[i].pcolormesh([self.z0_pts for j in range(self.map_pts)],np.array([self.phit_pts for k in range(self.map_pts)]).T,self.errors[i],shading='nearest',cmap=cmap)
-            self.map_ax[i].set(ylabel='tip work function / V')
-        self.map_ax[len(self.nstates)].pcolormesh([self.z0_pts for j in range(self.map_pts)],np.array([self.phit_pts for k in range(self.map_pts)]).T,sum(abs(self.errors[i]) for i in range(len(self.nstates))),shading='nearest',cmap=cmap)
-        self.map_ax[len(self.nstates)].set(xlabel='initial tip-sample distance / nm')
-        self.map_fig.show()
+        if not suppress_plotting:
+            for i in range(len(self.nstates)):
+                self.map_ax[i].pcolormesh([self.z0_pts for j in range(self.map_pts)],np.array([self.phit_pts for k in range(self.map_pts)]).T,self.errors[i],shading='nearest',cmap=cmap)
+                self.map_ax[i].set(ylabel='tip work function / V')
+            self.map_ax[len(self.nstates)].pcolormesh([self.z0_pts for j in range(self.map_pts)],np.array([self.phit_pts for k in range(self.map_pts)]).T,sum(abs(self.errors[i]) for i in range(len(self.nstates))),shading='nearest',cmap=cmap)
+            self.map_ax[len(self.nstates)].set(xlabel='initial tip-sample distance / nm')
+            self.map_fig.show()
                     
-                    
+if __name__=='__main__':
+    if not os.path.exists('./params'):
+        sys.exit()
+    sys.path.append(os.getcwd())
+    
+    #default settings
+    nprocs=1
+    npts=5000,
+    loop_pts=10
+    zmin=0.2402093333333333*5
+    w=0.2402093333333333
+    Vg=4.2
+    V0=4.633858138635734
+    z0=0
+    phis=4.59
+    phit=4.59
+    zm=0.015
+    t=0.249595
+    e1=5.688
+    vcbm=3.7
+    
+    with open('./params') as fp:
+        lines=fp.readlines()
+        for i in lines:
+            if i[0]=='w':
+                w=float(i[1])
+            if i[0]=='zmin':
+                zmin=float(i[1])
+            if i[0]=='Vg':
+                Vg=float(i[1])
+            if i[0]=='V0':
+                V0=float(i[1])
+            if i[0]=='z0':
+                z0=float(i[1])
+            if i[0]=='phis':
+                phis=float(i[1])
+            if i[0]=='phit':
+                phit=float(i[1])
+            if i[0]=='zm':
+                zm=float(i[1])
+            if i[0]=='t':
+                t=float(i[1])
+            if i[0]=='e1':
+                e1=float(i[1])
+            if i[0]=='vcbm':
+                vcbm=float(i[1])
+            if i[0]=='npts':
+                npts=int(i[1])
+            if i[0]=='loop_pts':
+                loop_pts=int(i[1])
+                
+    try:
+        opts,args=getopt.getopt(sys.argv[1:],'e:z:p:d:s:',['energies=','zvalues=','processors=','dielectric=','errors='])
+    except getopt.GetoptError:
+        print('error in command line syntax')
+        sys.exit(2)
+    for i,j in opts:
+        if i in ['-e', '--energies']:
+            energies=np.array([float(k) for k in j.split(',')])
+        if i in ['-z', '--zvalues']:
+            z=np.array([float(k) for k in j.split(',')])
+        if i in ['-s', '--errors']:
+            error=np.array([float(k) for k in j.split(',')])
+        if i in ['-p', '--processors']:
+            nprocs=int(j)
+        if i in ['-d','--dielectric']:
+            dielectric=bool(j)
+    test=optimize_parameters(energies,z,nprocs=nprocs,sigma=error,zmin=zmin,w=w,Vg=Vg,V0=V0,z0=z0,phis=phis,phit=phit,zm=zm,t=t,e1=e1,vcbm=vcbm)
