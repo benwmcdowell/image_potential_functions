@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import warnings
 import time
 import scipy
+from scipy import optimize
 from pathos.multiprocessing import ProcessPool
 import sys
 import os
@@ -176,7 +177,7 @@ def particle_in_a_box(n,L):
 
 class Numerov_Cooley():
     #x is in nm, pot is in J
-    def __init__(self,x,pot,tol=0.0000001,pot_type='default',filter_mode='nodes',suppress_output=True,max_steps=100,wf_height=1,overlay_stitch_point=False,localization_cutoff=1,suppress_timing_output=False):
+    def __init__(self,x,pot,tol=0.0000001,pot_type='default',filter_mode='none',suppress_output=True,max_steps=100,wf_height=1,overlay_stitch_point=False,localization_cutoff=1,suppress_timing_output=False):
         h=6.626e-34/np.pi/2 #J*s
         m=9.11e-31 #kg
         self.k=2*m/h**2*1e-18 #1/nm**2/J
@@ -207,13 +208,11 @@ class Numerov_Cooley():
         
     #E is the trial energy in eV
     def main(self,E):
-        if self.nprocs>1:
-            import numpy as np
         E*=self.k/6.242e18
         E-=self.pot_shift
         self.optimize_energy(E)
         if self.nprocs>1:
-            return E
+            return self.E[0]
         
     #loops main function with trial eigenvalues ranging from initial to final in nsteps steps
     def loop_main(self,initial,final,nsteps,nprocs=1):
@@ -223,9 +222,8 @@ class Numerov_Cooley():
         self.nprocs=nprocs
         
         if self.nprocs>1:
-            pool=ProcessPool(self.nprocs)
-            self.E=pool.map(self.main,np.linspace(initial,final,nsteps))
-            pool.close()
+            with ProcessPool(self.nprocs) as pool:
+                self.E=pool.map(self.main,np.linspace(initial,final,nsteps))
             
         else:
             percentage_counter=np.round(percentage_counter/100*(nsteps-1))
@@ -236,9 +234,9 @@ class Numerov_Cooley():
                 if counter in percentage_counter and not self.suppress_timing_output:
                     print('{}% finished with range of trial eigenvalues. {} s elapsed so far'.format(round(counter/(nsteps-1)*100),time.time()-start))
         
+        print(self.E )
     def node_counter(self,R):
-        if self.nprocs>1:
-            import numpy as np
+        import numpy as np
         counter=0
         if self.pot_type=='default':
             search_range=range(np.argmin(abs(self.x)),np.argmax(self.pot))
@@ -251,8 +249,7 @@ class Numerov_Cooley():
         return counter
         
     def optimize_energy(self,E):
-        if self.nprocs>1:
-            import numpy as np
+        import numpy as np
         dE=self.tol+1
         counter=0
         if not hasattr(self,'opt_fig') and not self.suppress_output:
@@ -368,8 +365,7 @@ class Numerov_Cooley():
             self.stitch_points.append(mp)
 
     def integrator(self,E):
-        if self.nprocs>1:
-            import numpy as np
+        import numpy as np
         Yin=np.zeros(self.npts)
         Rin=np.zeros(self.npts)
         Yout=np.zeros(self.npts)
@@ -436,22 +432,19 @@ class Numerov_Cooley():
         return dE,R,self.x[mp]
     
     def normalize_wf(self,R):
-        if self.nprocs>1:
-            import numpy as np
+        import numpy as np
         R/=np.linalg.norm(R)
         
         return R
     
     def avg_pos(self,R):
-        if self.nprocs>1:
-            import numpy as np
+        import numpy as np
         xavg=sum(self.x*(R/np.linalg.norm(R))**2)
         
         return xavg
     
     def find_maxima(self,R):
-        if self.nprocs>1:
-            import numpy as np
+        import numpy as np
         if self.pot_type=='default':
             mpmax=np.argmax(self.pot)
         else:
@@ -467,8 +460,6 @@ class Numerov_Cooley():
         return maxima
                 
     def overlay_Fermi_levels(self,Vb):
-        if self.nprocs>1:
-            import numpy as np
         if not hasattr(self,'wf_fig'):
             self.wf_fig,self.wf_ax=plt.subplots(1,1)
             self.wf_ax.set(xlabel='position / nm', ylabel='energy / eV')
@@ -602,6 +593,7 @@ class optimize_parameters():
             tempvar=Numerov_Cooley(x,pot,filter_mode='none',suppress_timing_output=True)
             tempvar.loop_main(0,self.peak_energies[i]+.5,self.loop_pts,nprocs=self.nprocs)
             tempvar.cleanup_output()
+            print(tempvar.E)
             
             temp_energies=[]
             counter=[]
@@ -621,7 +613,7 @@ class optimize_parameters():
                             temp_energies.append(j)
                             counter.append(1)
                             
-            calc_energies[i]=temp_energies[i]
+            calc_energies[i]=temp_energies[np.argmin(abs(temp_energies-self.peak_energies[i]))]
             
         self.calc_energies=calc_energies
         
@@ -810,6 +802,8 @@ if __name__=='__main__':
         lines=fp.readlines()
         for i in lines:
             i=i.split('=')
+            for j in range(2):
+                i[j]=i[j].split('\n')[0]
             if i[0]=='w':
                 w=float(i[1])
             if i[0]=='zmin':
@@ -853,4 +847,4 @@ if __name__=='__main__':
             nprocs=int(j)
         if i in ['-d','--dielectric']:
             dielectric=bool(j)
-    test=optimize_parameters(energies,z,nprocs=nprocs,sigma=error,zmin=zmin,w=w,Vg=Vg,V0=V0,z0=z0,phis=phis,phit=phit,zm=zm,t=t,e1=e1,vcbm=vcbm)
+    test=optimize_parameters(energies,z,nprocs=nprocs,sigma=error,zmin=w*zmin,w=w,Vg=Vg,V0=V0,z0=z0,phis=phis,phit=phit,zm=zm,t=t,e1=e1,vcbm=vcbm,suppress_plotting=True)
