@@ -67,15 +67,16 @@ def build_potential_with_dielectric(n,zmin,w,Vg,V0,d,phis,phit,V,zm,t,e1,Vcbm):
     for i in range(len(x)):
         if x[i]>0 and x[i]<t:
             image_sum[i]=Vcbm
+            
+    tempvar=image_sum[np.argmin(abs(x-t-zm))]
+    for i in range(len(x)):
+        if x[i]>t and x[i]<t+zm:
+            image_sum[i]=tempvar
     
     pot=field_pot+image_sum
     pot=np.nan_to_num(pot)
     
     pot*=np.heaviside(x,1)
-    tempvar=pot[np.argmin(abs(x-t-zm))]
-    for i in range(len(x)):
-        if x[i]>t and x[i]<t+zm:
-            pot[i]=tempvar
     bulk_pot=-Vg*np.cos(2*np.pi*x/w)-V0
     pot[:np.argmin(abs(x))+1]+=bulk_pot[:np.argmin(abs(x))+1]
     
@@ -234,7 +235,6 @@ class Numerov_Cooley():
                 if counter in percentage_counter and not self.suppress_timing_output:
                     print('{}% finished with range of trial eigenvalues. {} s elapsed so far'.format(round(counter/(nsteps-1)*100),time.time()-start))
         
-        print(self.E )
     def node_counter(self,R):
         import numpy as np
         counter=0
@@ -485,7 +485,9 @@ class Numerov_Cooley():
         
         self.wf_fig.canvas.draw()
         
-        print('closest eigenenergy to {} eV bias voltage is: {} eV with {} % error'.format(Vb,self.E[np.argmin(abs(np.array(self.E)-Vb))],(self.E[np.argmin(abs(np.array(self.E)-Vb))]-Vb)/Vb*100))
+        self.error=(self.E[np.argmin(abs(np.array(self.E)-Vb))]-Vb)/Vb*100
+        
+        print('closest eigenenergy to {} eV bias voltage is: {} eV with {} % error'.format(Vb,self.E[np.argmin(abs(np.array(self.E)-Vb))],self.error))
     
     def cleanup_output(self):
         self.pot_shift*=6.242e18/self.k
@@ -579,7 +581,7 @@ class optimize_parameters():
             print('calculated energies:')
             for i in range(len(self.nstates)):
                 print('{} eV with error of {} %'.format(self.calc_energies[i],(self.calc_energies[i]-self.peak_energies[i])/self.peak_energies[i]*100))
-    
+                
     #function for fitting parameters in potential with no dielectric
     #the free parameters are the initial tip-sample distance and the tip work function
     def model_no_dielectric(self,nstates,z0,phit_opt):
@@ -593,7 +595,6 @@ class optimize_parameters():
             tempvar=Numerov_Cooley(x,pot,filter_mode='none',suppress_timing_output=True)
             tempvar.loop_main(0,self.peak_energies[i]+.5,self.loop_pts,nprocs=self.nprocs)
             tempvar.cleanup_output()
-            print(tempvar.E)
             
             temp_energies=[]
             counter=[]
@@ -652,7 +653,7 @@ class optimize_parameters():
             d_opt=self.z0+self.peak_heights[i]
             x,pot=build_potential_with_dielectric(self.npts,self.zmin,self.w,self.Vg,self.V0,d_opt,phis_opt,self.phit,self.peak_energies[i],self.zm,self.t,e1_opt,vcbm_opt)
             tempvar=Numerov_Cooley(x,pot,filter_mode='none',suppress_timing_output=True)
-            tempvar.loop_main(0,self.peak_energies[i]+.5,self.loop_pts)
+            tempvar.loop_main(self.peak_energies[i]-.5,self.peak_energies[i]+.5,self.loop_pts)
             tempvar.cleanup_output()
             
             temp_energies=[]
