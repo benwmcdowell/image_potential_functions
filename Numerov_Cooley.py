@@ -539,15 +539,17 @@ class optimize_parameters():
         class model_without_dielectric(torch.nn.Module):
             def __init__(self,z0,phit):
                 super().__init__()
-                self.z0=torch.nn.Parameter(torch.ones(1000)*z0,requires_grad=True)
-                self.phit=torch.nn.Parameter(torch.ones(1000)*phit,requires_grad=True)
-            def forward(self,nstates,z0,phit_opt,npts,zmin,w,Vg,V0,phis,peak_energies,zm):
+                self.z0=torch.nn.Parameter(torch.ones(1)*z0,requires_grad=True)
+                self.phit=torch.nn.Parameter(torch.ones(1)*phit,requires_grad=True)
+            def forward(self,nstates,npts,zmin,w,Vg,V0,phis,peak_energies,peak_heights,zm):
                 energy_min=0
                 energy_tol=0.0001
+                phit_opt=float(self.phit)
+                z0_opt=float(self.z0)
                 
                 calc_energies=np.zeros(len(nstates))
                 for i in range(len(nstates)):
-                    d_opt=z0+peak_heights[i]
+                    d_opt=z0_opt+peak_heights[i]
                     x,pot=build_potential_no_dielectric(npts,zmin,w,Vg,V0,d_opt,phis,phit_opt,peak_energies[i],zm)
                     tempvar=Numerov_Cooley(x,pot,filter_mode='none',suppress_timing_output=True)
                     tempvar.loop_main(0,peak_energies[i]+.5,loop_pts)
@@ -572,17 +574,15 @@ class optimize_parameters():
                                     counter.append(1)
                                     
                     calc_energies[i]=temp_energies[np.argmin(abs(temp_energies-peak_energies[i]))]
-                return calc_energies
+                return torch.from_numpy(calc_energies)
         
         model=model_without_dielectric(self.z0,self.phit)
         criterion = torch.nn.MSELoss()
         optimizer = torch.optim.SGD(model.parameters(), lr=1e-6)
-        for i in range(1000):
-            e_predicted=model(self.nstates,self.z0,self.phit,self.npts,self.zmin,self.w,self.Vg,self.V0,self.phis,self.peak_energies,self.zm)
-            print(np.shape(e_predicted))
-            print(np.shape(self.peak_energies))
+        for i in range(100):
+            e_predicted=model(self.nstates,self.npts,self.zmin,self.w,self.Vg,self.V0,self.phis,self.peak_energies,self.peak_heights,self.zm)
             loss=criterion(e_predicted,torch.from_numpy(self.peak_energies))
-            if i%100 == 99:
+            if i%10 == 9:
                 print(i, loss.item())
                 
             optimizer.zero_grad()
