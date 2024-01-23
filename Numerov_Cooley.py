@@ -537,10 +537,10 @@ class optimize_parameters():
         self.vcbm=vcbm
         
         class model_without_dielectric(torch.nn.Module):
-            def __init__(self):
-                super().__init__(self)
-                self.z0=torch.nn.Parameter(torch.ones(100)*self.z0,requires_grad=True)
-                self.phit=torch.nn.Parameter(torch.ones(100)*self.z0,requires_grad=True)
+            def __init__(self,z0,phit):
+                super().__init__()
+                self.z0=torch.nn.Parameter(torch.ones(1000)*z0,requires_grad=True)
+                self.phit=torch.nn.Parameter(torch.ones(1000)*phit,requires_grad=True)
             def forward(self,nstates,z0,phit_opt,npts,zmin,w,Vg,V0,phis,peak_energies,zm):
                 energy_min=0
                 energy_tol=0.0001
@@ -573,6 +573,21 @@ class optimize_parameters():
                                     
                     calc_energies[i]=temp_energies[np.argmin(abs(temp_energies-peak_energies[i]))]
                 return calc_energies
+        
+        model=model_without_dielectric(self.z0,self.phit)
+        criterion = torch.nn.MSELoss()
+        optimizer = torch.optim.SGD(model.parameters(), lr=1e-6)
+        for i in range(1000):
+            e_predicted=model(self.nstates,self.z0,self.phit,self.npts,self.zmin,self.w,self.Vg,self.V0,self.phis,self.peak_energies,self.zm)
+            print(np.shape(e_predicted))
+            print(np.shape(self.peak_energies))
+            loss=criterion(e_predicted,torch.from_numpy(self.peak_energies))
+            if i%100 == 99:
+                print(i, loss.item())
+                
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
         
 class optimize_parameters_old():
     def __init__(self,peak_energies,peak_heights,sigma=None,dielectric=False,loop_pts=100,npts=5000,suppress_plotting=False,nprocs=1,zmin=0.2402093333333333*5,w=0.2402093333333333,Vg=4.2,V0=4.633858138635734,z0=0,phis=4.59,phit=4.59,zm=0.015,t=0.249595,e1=5.688,vcbm=3.78):
