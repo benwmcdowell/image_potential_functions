@@ -515,9 +515,9 @@ class Numerov_Cooley():
 class optimize_parameters():
     def __init__(self,peak_energies,peak_heights,sigma=None,dielectric=False,loop_pts=100,npts=5000,suppress_plotting=False,nprocs=1,zmin=0.2402093333333333*5,w=0.2402093333333333,Vg=4.2,V0=4.633858138635734,z0=0,phis=4.59,phit=4.59,zm=0.015,t=0.249595,e1=5.688,vcbm=3.78):
     
-        self.nstates=np.array([i for i in range(len(peak_energies))])
-        self.peak_energies=peak_energies
-        self.peak_heights=peak_heights
+        self.nstates=torch.tensor([i for i in range(len(peak_energies))])
+        self.peak_energies=torch.from_numpy(peak_energies)
+        self.peak_heights=torch.from_numpy(peak_heights)
         
         self.dielectric=dielectric
         self.loop_pts=loop_pts
@@ -578,7 +578,7 @@ class optimize_parameters():
         
         model=model_without_dielectric(self.z0,self.phit)
         criterion = torch.nn.MSELoss()
-        optimizer = torch.optim.SGD(model.parameters(), lr=1e-6)
+        optimizer = torch.optim.SGD(model.parameters(), lr=10)
         for i in range(100):
             e_predicted=model(self.nstates,self.npts,self.zmin,self.w,self.Vg,self.V0,self.phis,self.peak_energies,self.peak_heights,self.zm)
             loss=criterion(e_predicted,torch.from_numpy(self.peak_energies))
@@ -586,6 +586,7 @@ class optimize_parameters():
                 print(i, loss.item())
                 
             optimizer.zero_grad()
+            #loss.requires_grad=True
             loss.backward()
             optimizer.step()
         
