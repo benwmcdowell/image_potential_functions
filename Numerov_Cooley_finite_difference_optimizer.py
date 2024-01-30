@@ -218,14 +218,12 @@ class Numerov_Cooley():
         self.peak_slope=[]
         self.nstates=0
         self.pot_type=pot_type
-        self.filter_mode=filter_mode
         self.suppress_output=suppress_output
         self.max_dE=1.0
         self.max_steps=max_steps
         self.wf_height=wf_height
         self.stitch_points=[]
         self.overlay_stitch_point=overlay_stitch_point
-        self.localization_cutoff=localization_cutoff
         self.suppress_timing_output=suppress_timing_output
         
     #E is the trial energy in eV
@@ -296,94 +294,12 @@ class Numerov_Cooley():
             print('energy converged after {} iterations'.format(counter))
         nodes=self.node_counter(R)
         #R=self.normalize_wf(R)
-        xavg=self.avg_pos(R)
         
-        if self.filter_mode=='nodes':
-            if nodes not in self.nodes:
-                self.nodes.append(nodes)
-                self.nstates+=1
-                self.E.append(E)
-                self.wf.append(R)
-                self.xavg.append(xavg)
-                self.stitch_points.append(mp)
-            if nodes in self.nodes:
-                i=self.nodes.index(nodes)
-                if abs(xavg)<abs(self.xavg[i]):
-                    self.nodes[i]=nodes
-                    self.E[i]=E
-                    self.wf[i]=R
-                    self.xavg[i]=xavg
-                    self.stitch_points.append(mp)
-                    
-        elif self.filter_mode=='energy':
-            if len(self.E)>0:
-                energy_check=True
-                new_val=False
-            else:
-                energy_check=False
-                new_val=True
-            counter=0
-            while energy_check:
-                if E>self.E[counter]-self.tol and E<self.E[counter]+self.tol:
-                    energy_check=False
-                counter+=1
-                if counter==len(self.E):
-                    new_val=True
-                    energy_check=False
-            if new_val:
-                self.nodes.append(nodes)
-                self.nstates+=1
-                self.E.append(E)
-                self.wf.append(R)
-                self.xavg.append(xavg)
-                self.stitch_points.append(mp)
-            else:
-                i=np.argmin(abs(np.array(self.E)-E))
-                if abs(xavg)<abs(self.xavg[i]):
-                    self.nodes[i]=nodes
-                    self.E[i]=E
-                    self.wf[i]=R
-                    self.xavg[i]=xavg
-                    self.stitch_points.append(mp)
-                    
-        elif self.filter_mode=='localized':
-            peaks=[]
-            peak_heights=[]
-            for i in range(1,self.npts-1):
-                if abs(R[i])>abs(R[i-1]) and abs(R[i])>abs(R[i+1]):
-                    peaks.append(self.x[i])
-                    peak_heights.append(abs(R[i]))
-            if len(peak_heights)>1:
-                
-                def line_fit(x,a,b):
-                    return a*x+b
-                
-                params=scipy.optimize.curve_fit(line_fit,[i for i in range(len(peak_heights))],peak_heights)
-                #if params[0][0]>0 and xavg>np.min(self.x)/2+abs(np.min(self.x)/20):
-                if params[0][0]>0 and self.x[np.argmax(R)]>-self.localization_cutoff:
-                    self.nodes.append(nodes)
-                    self.nstates+=1
-                    self.E.append(E)
-                    self.wf.append(R)
-                    self.xavg.append(xavg)
-                    self.peak_slope.append(params[0][0])
-                    self.stitch_points.append(mp)
-            else:
-                self.nodes.append(nodes)
-                self.nstates+=1
-                self.E.append(E)
-                self.wf.append(R)
-                self.xavg.append(xavg)
-                self.peak_slope.append(0)
-                self.stitch_points.append(mp)
-                    
-        elif self.filter_mode=='none':
-            self.nodes.append(nodes)
-            self.nstates+=1
-            self.E.append(E)
-            self.wf.append(R)
-            self.xavg.append(xavg)
-            self.stitch_points.append(mp)
+        self.nodes.append(nodes)
+        self.nstates+=1
+        self.E.append(E)
+        self.wf.append(R)
+        self.stitch_points.append(mp)
 
     def integrator(self,E):
         import numpy as np
@@ -535,7 +451,7 @@ class Numerov_Cooley():
         
         
 class optimize_parameters():
-    def __init__(self,peak_energies,peak_heights,sigma=None,dielectric=False,loop_pts=100,npts=5000,nprocs=1,zmin=0.2402093333333333*5,w=0.2402093333333333,Vg=4.2,V0=4.633858138635734,z0=0,phis=4.59,phit=4.59,zm=0.015,t=0.249595,e1=5.688,vcbm=3.78,R=0.0,lr=1e-3):
+    def __init__(self,peak_energies,peak_heights,sigma=None,dielectric=False,loop_pts=100,npts=5000,nprocs=1,zmin=0.2402093333333333*5,w=0.2402093333333333,Vg=4.2,V0=4.633858138635734,z0=0,phis=4.59,phit=4.59,zm=0.015,t=0.249595,e1=5.688,vcbm=3.78,R=0.0,lr=1,e_threshold=1e-6):
     
         self.nstates=np.array([i for i in range(len(peak_energies))])
         self.peak_energies=peak_energies
@@ -564,22 +480,35 @@ class optimize_parameters():
         if not self.dielectric:
             z0_traj=[]
             phit_traj=[]
-            z0_grad=[]
-            phit_grad=[]
-            error_traj=[]
+            R_traj=[]
+            esum_traj=[]
+            emag_traj=[]
             
             for i in range(100):
                 z0_traj.append(self.z0)
                 phit_traj.append(self.phit)
-                error=sum(self.model_no_dielectric(self.z0,self.phit))
-                print(self.z0,self.phit,error)
-                error_traj.append(error)
-                self.z0+=error*lr
-                self.phit-=error*lr
+                R_traj.append(self.R)
+                errors=self.model_no_dielectric(self.z0,self.phit,self.R)
+                esum=sum(errors)
+                emag=np.linalg.norm(errors)
                 
-            print('total # of optimization steps: {}'.format(len(self.opt_steps)))
-            print('total # of eigenvalue calculations: {}'.format(len(self.opt_steps*self.loop_pts)))
-            print('average time per eigenvalue calculation: {} s'.format((time.time()-self.start)/(len(self.opt_steps)*self.loop_pts)))
+                #uncomment to see print output of optimization progression
+                print(self.z0,self.phit,self.R,emag)
+                
+                esum_traj.append(esum)
+                emag_traj.append(emag)
+                grad=self.calc_grad()
+                self.z0-=lr*emag/np.average([grad[0,1]-self.z0,self.z0-grad[0,0]])
+                self.phit-=lr*emag/np.average([grad[0,1]-self.phit,self.phit-grad[0,0]])
+                self.R-=lr*emag/np.average([grad[0,1]-self.R,self.R-grad[0,0]])
+                
+                if len(emag_traj)>2:
+                    if abs(emag_traj[-1]-emag_traj[-2])<e_threshold:
+                        break
+                
+            print('total # of optimization steps: {}'.format(i))
+            print('total # of eigenvalue calculations: {}'.format(i*self.loop_pts))
+            print('average time per eigenvalue calculation: {} s'.format((time.time()-self.start)/(i*self.loop_pts)))
             
             print('calculated energies:')
             for i in range(len(self.nstates)):
@@ -606,14 +535,14 @@ class optimize_parameters():
                 
     #function for fitting parameters in potential with no dielectric
     #the free parameters are the initial tip-sample distance and the tip work function
-    def model_no_dielectric(self,z0,phit_opt):
+    def model_no_dielectric(self,z0,phit_opt,R_opt):
         energy_min=0
         energy_tol=0.0001
         
-        calc_energies=np.zeros(len(self.nstates))
+        self.calc_energies=np.zeros(len(self.nstates))
         for i in range(len(self.nstates)):
             d_opt=z0+self.peak_heights[i]
-            x,pot=build_potential_no_dielectric(self.npts,self.zmin,self.w,self.Vg,self.V0,d_opt,self.phis,phit_opt,self.peak_energies[i],self.zm)
+            x,pot=build_potential_no_dielectric(self.npts,self.zmin,self.w,self.Vg,self.V0,d_opt,self.phis,phit_opt,self.peak_energies[i],self.zm,R=R_opt)
             tempvar=Numerov_Cooley(x,pot,filter_mode='none',suppress_timing_output=True)
             tempvar.loop_main(self.peak_energies[i]-.5,self.peak_energies[i]+.5,self.loop_pts,nprocs=self.nprocs)
             tempvar.cleanup_output()
@@ -636,9 +565,9 @@ class optimize_parameters():
                             temp_energies.append(j)
                             counter.append(1)
                             
-            calc_energies[i]=temp_energies[np.argmin(abs(temp_energies-self.peak_energies[i]))]
+            self.calc_energies[i]=temp_energies[np.argmin(abs(temp_energies-self.peak_energies[i]))]
             
-        errors=calc_energies-self.peak_energies
+        errors=self.calc_energies-self.peak_energies
         
         return errors
     
@@ -679,7 +608,18 @@ class optimize_parameters():
         errors=calc_energies-self.peak_energies
         
         return errors
-                    
+        
+    def calc_grad(self,dx=0.01):
+        if not self.dielectric:
+            grad_output=np.zeros((3,2))
+            for i in range(3):
+                for j,k in zip(range(2),[-abs(dx),abs(dx)]):
+                    inputs=[self.z0,self.phit,self.R]
+                    inputs[i]+=k
+                    grad_output[i,j]=np.linalg.norm(self.model_no_dielectric(inputs[0],inputs[1],inputs[2]))
+        
+        return grad_output
+            
 if __name__=='__main__':
     if not os.path.exists('./params'):
         sys.exit()
