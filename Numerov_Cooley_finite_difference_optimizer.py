@@ -8,18 +8,20 @@ import sys
 import os
 import getopt
 from scipy.special import eval_legendre
+import pyperclip
 
 #d is the tip-sample distance in nm
 #V is the voltage bias in eV
 #Vmin is the minimum potential of the substrate periodic potential in eV
 #zm is the range of the potential set to a constant value near the sumple interface (nm)
-def build_potential_with_dielectric(n,zmin,w,Vg,V0,d,phis,phit,V,zm,t,e1,Vcbm):
+def build_potential_with_dielectric(n,zmin,w,Vg,V0,d,phis,phit,V,zm,t,e1,Vcbm,R=0.0):
     warnings.filterwarnings("ignore",category=RuntimeWarning)
     d*=1e-9 #convert nm to m
     zm*=1e-9 #convert nm to m
     zmin*=1e-9 #convert nm to m
     w*=1e-9 #convert nm to m
     t*=1e-9 #convert nm to m
+    R*=1e-9 #convert nm to m
     Vg*=1.60218e-19 #eV to J
     V*=1.60218e-19 #eV to J
     V0*=1.60218e-19 #eV to J
@@ -34,13 +36,35 @@ def build_potential_with_dielectric(n,zmin,w,Vg,V0,d,phis,phit,V,zm,t,e1,Vcbm):
     Vcbm-=phis    
     x=np.linspace(-zmin,d,n)
     edrop=V*(e0*(t))/(e1*(d-t)+e0*(t))
-    field_pot=phis+(phit-phis)*x/d+((V-edrop)/(d-t)*(x-t)+edrop)*np.heaviside(x-t,1)+(edrop*x/t)*np.heaviside(t-x,0)
+    sum_threshold=1/1000
+    if R==0:
+        field_pot=phis+(phit-phis)*x/d+((V-edrop)/(d-t)*(x-t)+edrop)*np.heaviside(x-t,1)+(edrop*x/t)*np.heaviside(t-x,0)
+    else:
+        field_pot=-(V+phit-phis-edrop)*np.sqrt(2)
+        a=np.sqrt((d+R)**2-R**2)
+        tau0=np.arcsinh(a/R)
+        tau=np.arcsinh(2*a*x/(x**2-a**2))
+        field_pot*=np.sqrt(np.cosh(tau)-1)
+        
+        tempvar=0
+        dt=1
+        i=0
+        while np.max(abs(dt))>np.max(abs(tempvar))*sum_threshold:
+            dt=np.exp(-(i+1/2)*tau0)/np.sinh((i+1/2)*tau0)*np.sinh((i+1/2)*tau)*eval_legendre(i,1)
+            tempvar+=dt
+            i+=1
+            
+        field_pot*=tempvar
+        field_pot+=edrop
+        field_pot*=np.heaviside(x-t,1)
+        field_pot+=phis
+        field_pot+=((edrop*x/t)+(phit-phis)*x/d)*np.heaviside(t-x,0)
+        
     
     image_pot_sub=-e**2/4/e0/np.pi/2/2
     image_pot_tip=-e**2/4/e0/np.pi/2/2
     image_pot_sub_sum=np.zeros(n)
     image_pot_tip_sum=np.zeros(n)
-    sum_threshold=1/1000
     for i in range(np.argmin(abs(x)),n):
         dT=1
         dS=1
@@ -97,7 +121,7 @@ def build_potential_with_dielectric(n,zmin,w,Vg,V0,d,phis,phit,V,zm,t,e1,Vcbm):
 #V is the voltage bias in eV
 #Vmin is the minimum potential of the substrate periodic potential in eV
 #zm is the range of the potential set to a constant value near the sumple interface (nm)
-def build_potential_no_dielectric(n,zmin,w,Vg,V0,d,phis,phit,V,zm,R=0):
+def build_potential_no_dielectric(n,zmin,w,Vg,V0,d,phis,phit,V,zm,R=0.0):
     warnings.filterwarnings("ignore",category=RuntimeWarning)
     d*=1e-9 #convert nm to m
     zm*=1e-9 #convert nm to m
@@ -442,7 +466,6 @@ class Numerov_Cooley():
         for i in range(len(self.E)):
             self.wf_ax.plot([self.x[0],self.x[-1]],[self.E[i] for j in range(2)],color='black',lw=2,linestyle='dashed')
             self.wf_ax.plot(self.x,self.wf[i]/np.max(self.wf[i])*self.wf_height+self.E[i],color='black',lw=2)
-            self.wf_ax.scatter(self.xavg[i],self.E[i],color='black',s=100)
             if self.overlay_stitch_point:
                 self.wf_ax.scatter(self.stitch_points[i],self.E[i],color='green',s=100)
         self.wf_ax.legend()
@@ -451,7 +474,7 @@ class Numerov_Cooley():
         
         
 class optimize_parameters():
-    def __init__(self,peak_energies,peak_heights,sigma=None,dielectric=False,loop_pts=100,npts=5000,nprocs=1,zmin=0.2402093333333333*5,w=0.2402093333333333,Vg=4.2,V0=4.633858138635734,z0=0,phis=4.59,phit=4.59,zm=0.015,t=0.249595,e1=5.688,vcbm=3.78,R=0.0,lr=1,e_threshold=1e-6):
+    def __init__(self,peak_energies,peak_heights,sigma=None,dielectric=False,loop_pts=100,npts=5000,nprocs=1,zmin=0.236965*5,w=0.236965,Vg=4.2,V0=4.633858138635734,z0=0,phis=4.59,phit=4.59,zm=0.015,t=0.249595,e1=5.688,vcbm=3.78,R=0.0,lr=1,e_threshold=1e-4):
     
         self.nstates=np.array([i for i in range(len(peak_energies))])
         self.peak_energies=peak_energies
@@ -498,40 +521,71 @@ class optimize_parameters():
                 esum_traj.append(esum)
                 emag_traj.append(emag)
                 grad=self.calc_grad()
-                self.z0-=lr*emag/np.average([grad[0,1]-self.z0,self.z0-grad[0,0]])
-                self.phit-=lr*emag/np.average([grad[0,1]-self.phit,self.phit-grad[0,0]])
-                self.R-=lr*emag/np.average([grad[0,1]-self.R,self.R-grad[0,0]])
+                self.z0-=lr*emag*np.average([grad[0,1]-self.z0,self.z0-grad[0,0]])
+                self.phit-=lr*emag*np.average([grad[1,1]-self.phit,self.phit-grad[1,0]])
+                self.R-=lr*emag*np.average([grad[2,1]-self.R,self.R-grad[2,0]])
                 
                 if len(emag_traj)>2:
                     if abs(emag_traj[-1]-emag_traj[-2])<e_threshold:
                         break
                 
-            print('total # of optimization steps: {}'.format(i))
-            print('total # of eigenvalue calculations: {}'.format(i*self.loop_pts))
-            print('average time per eigenvalue calculation: {} s'.format((time.time()-self.start)/(i*self.loop_pts)))
-            
-            print('calculated energies:')
-            for i in range(len(self.nstates)):
-                print('{} eV with error of {} %'.format(self.calc_energies[i],(self.calc_energies[i]-self.peak_energies[i])/self.peak_energies[i]*100))
-                
         elif self.dielectric:
-            self.errors=[[] for i in range(len(self.nstates))]
-            self.opt_params=[[],[],[]]
-            self.opt_steps=[]
+            phis_traj=[]
+            vcbm_traj=[]
+            e1_traj=[]
+            esum_traj=[]
+            emag_traj=[]
             
-            p0=(self.phis,self.vcbm,self.e1)
-            bounds=((0,0,0),(np.inf,np.inf,np.inf))
-            popt,pcov=scipy.optimize.curve_fit(self.model_with_dielectric,self.nstates,self.peak_energies,p0=p0,bounds=bounds,method='trf')
-            pcov=np.sqrt(np.diag(pcov))
-            print('optimized parameters:\nsample work function = {} +/- {} eV\nconduction band minimum of dielectric= {} +/- {} eV\ndielectric permittivity = {} +/- {}'.format(popt[0],pcov[0],popt[1],pcov[1],popt[2],pcov[2]))
+            for i in range(100):
+                phis_traj.append(self.phis)
+                vcbm_traj.append(self.vcbm)
+                e1_traj.append(self.e1)
+                errors=self.model_with_dielectric(self.phis,self.vcbm,self.e1)
+                esum=sum(errors)
+                emag=np.linalg.norm(errors)
+                
+                #uncomment to see print output of optimization progression
+                print(self.phis,self.vcbm,self.e1,emag)
+                
+                esum_traj.append(esum)
+                emag_traj.append(emag)
+                grad=self.calc_grad()
+                self.phis-=lr*emag*np.average([grad[0,1]-self.phis,self.phis-grad[0,0]])
+                self.vcbm-=lr*emag*np.average([grad[1,1]-self.vcbm,self.vcbm-grad[1,0]])
+                self.e1-=lr*emag*np.average([grad[2,1]-self.e1,self.e1-grad[2,0]])
+                
+                if len(emag_traj)>2:
+                    if abs(emag_traj[-1]-emag_traj[-2])<e_threshold:
+                        break
+                
+        print('total # of optimization steps: {}'.format(i))
+        print('total # of eigenvalue calculations: {}'.format(i*self.loop_pts))
+        print('average time per eigenvalue calculation: {} s'.format((time.time()-self.start)/(i*self.loop_pts)))
+        
+        print('calculated energies:')
+        for i in range(len(self.nstates)):
+            print('{} eV with error of {} %'.format(self.calc_energies[i],(self.calc_energies[i]-self.peak_energies[i])/self.peak_energies[i]*100))
+        
+    def copy_energies(self):
+        energy_text=''
+        for i in self.calc_energies:
+            if i!=self.calc_energies[0]:
+                energy_text+='\n'
+            energy_text+=str(i)
+        pyperclip.copy(energy_text)
+        
+    def copy_params(self):
+        if not self.dielectric:
+            params=[self.z0,self.phit,self.R]
+        elif self.dielectric:
+            params=[self.phis,self.e1,self.vcbm]
             
-            print('total # of optimization steps: {}'.format(len(self.opt_steps)))
-            print('total # of eigenvalue calculations: {}'.format(len(self.opt_steps*self.loop_pts)))
-            print('average time per eigenvalue calculation: {} s'.format((time.time()-self.start)/(len(self.opt_steps)*self.loop_pts)))
-            
-            print('calculated energies:')
-            for i in range(len(self.nstates)):
-                print('{} eV with error of {} %'.format(self.calc_energies[i],(self.calc_energies[i]-self.peak_energies[i])/self.peak_energies[i]*100))
+        param_text=''
+        for i,j in zip(params,range(3)):
+            if j!=0:
+                param_text+='\n'
+            param_text+=str(i)
+        pyperclip.copy(param_text)
                 
     #function for fitting parameters in potential with no dielectric
     #the free parameters are the initial tip-sample distance and the tip work function
@@ -577,10 +631,10 @@ class optimize_parameters():
         energy_min=0
         energy_tol=0.0001
         
-        calc_energies=np.zeros(len(self.nstates))
+        self.calc_energies=np.zeros(len(self.nstates))
         for i in range(len(self.nstates)):
-            d_opt=self.z0+self.peak_heights[i]
-            x,pot=build_potential_with_dielectric(self.npts,self.zmin,self.w,self.Vg,self.V0,d_opt,phis_opt,self.phit,self.peak_energies[i],self.zm,self.t,e1_opt,vcbm_opt)
+            d=self.z0+self.peak_heights[i]
+            x,pot=build_potential_with_dielectric(self.npts,self.zmin,self.w,self.Vg,self.V0,d,phis_opt,self.phit,self.peak_energies[i],self.zm,self.t,e1_opt,vcbm_opt,R=self.R)
             tempvar=Numerov_Cooley(x,pot,filter_mode='none',suppress_timing_output=True)
             tempvar.loop_main(self.peak_energies[i]-.5,self.peak_energies[i]+.5,self.loop_pts)
             tempvar.cleanup_output()
@@ -603,21 +657,26 @@ class optimize_parameters():
                             temp_energies.append(j)
                             counter.append(1)
                             
-            calc_energies[i]=temp_energies[np.argmin(abs(np.array(temp_energies)-self.peak_energies[i]))]
+            self.calc_energies[i]=temp_energies[np.argmin(abs(temp_energies-self.peak_energies[i]))]
             
-        errors=calc_energies-self.peak_energies
+        errors=self.calc_energies-self.peak_energies
         
         return errors
         
     def calc_grad(self,dx=0.01):
-        if not self.dielectric:
-            grad_output=np.zeros((3,2))
-            for i in range(3):
-                for j,k in zip(range(2),[-abs(dx),abs(dx)]):
+        grad_output=np.zeros((3,2))
+        for i in range(3):
+            for j,k in zip(range(2),[-abs(dx),abs(dx)]):
+                if not self.dielectric:
                     inputs=[self.z0,self.phit,self.R]
-                    inputs[i]+=k
+                elif self.dielectric:
+                    inputs=[self.phis,self.vcbm,self.e1]
+                inputs[i]+=k
+                if not self.dielectric:
                     grad_output[i,j]=np.linalg.norm(self.model_no_dielectric(inputs[0],inputs[1],inputs[2]))
-        
+                else:
+                    grad_output[i,j]=np.linalg.norm(self.model_with_dielectric(inputs[0],inputs[1],inputs[2]))
+                    
         return grad_output
             
 if __name__=='__main__':
